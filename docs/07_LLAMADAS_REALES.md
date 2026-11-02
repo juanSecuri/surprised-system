@@ -32,14 +32,16 @@ Necesitas la **clave del celular** (`LLAMADAS_TOKEN`) que generó `configurar_te
    - URL:
      `https://centinela.juan-gallego-sec.workers.dev/api/llamada?token=TU_CLAVE&formato=texto`
    - Cuerpo / Content body: tipo `application/json` y texto:
-     `{"numero":"[call_number]","dispositivo":"celular-sensor"}`
-     (`[call_number]` se inserta con el botón de *texto mágico* → *Número de llamada*.)
+     `{"numero":"{call_number}","dispositivo":"samsung-a50"}`
+     (insértalo con el botón **"…"** → *Número de llamada*; las versiones nuevas de MacroDroid usan llaves `{ }`, las viejas corchetes `[ ]`.)
    - Guardar respuesta en variable: crea variable de texto **`veredicto`**.
    - Tiempo de espera: 10 s.
 5. **Acción 2** → *Notificación* → **Mostrar notificación**:
    - Título: `Centinela`
-   - Texto: `[lv=veredicto]` (variable local *veredicto*).
+   - Texto: `{lv=veredicto}` (variable local *veredicto*, insertada con el botón "…").
 6. Guarda la macro (✔) y deja MacroDroid con permiso de **ejecutarse en segundo plano** / sin optimización de batería.
+
+**Importante (Samsung A50, probado):** después de dar los permisos hay que **reiniciar el celular**; sin reinicio el disparador *Llamada entrante* no se activa. Para probar sin llamada: en la macro, menú ⋮ → *Probar acciones* (debe llegar "número oculto").
 
 **Probar:** desde otro celular llama al Android. Antes del segundo timbre debe salir la notificación, llegar la alerta a Telegram y aparecer en la web.
 
