@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Centinela · ¿Quién te está llamando?</title>
+<meta name="description" content="Consulta si un número es spam o estafa antes de contestar. Reportes de la comunidad, IA local y un clúster que no se cae.">
+<meta name="theme-color" content="#16203A">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z' fill='%232346D8'/%3E%3Cpath d='M11 16.5l3.5 3.5L21 13' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="barra">
+  <a class="marca" href="#inicio" aria-label="Centinela, inicio">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z"/><path class="check" d="M11 16.5l3.5 3.5L21 13"/></svg>
+    Centinela
+  </a>
+  <nav class="menu" aria-label="Secciones">
+    <a href="#reportar">Reportar</a>
+    <a href="#comunidad">Comunidad</a>
+    <a href="#cluster">Clúster</a>
+    <a href="#protegerte">Protégete</a>
+  </nav>
+  <a class="pulso" href="#cluster" id="pulso" aria-live="polite">
+    <span class="punto"></span><span id="pulso-txt">Conectando…</span>
+  </a>
+</header>
+
+<main id="inicio">
+
+  <!-- HERO: el identificador de llamadas -->
+  <section class="hero">
+    <div class="hero-texto">
+      <h1>¿Quién te está llamando?</h1>
+      <p class="bajada">Escribe el número antes de contestar. Centinela te dice si otras personas lo han reportado como estafa, cobranza o spam.</p>
+
+      <form id="form-consulta" class="marcador" autocomplete="off">
+        <label for="numero" class="sr">Número de teléfono</label>
+        <span class="prefijo" aria-hidden="true">+57</span>
+        <input id="numero" name="numero" inputmode="tel" placeholder="300 123 4567" maxlength="22" required>
+        <button type="submit" class="btn-principal">Consultar</button>
+      </form>
+      <p class="ayuda">Funciona con celulares, fijos (601…) y números internacionales con +.</p>
+
+      <dl class="cifras" id="cifras">
+        <div><dt>números vigilados</dt><dd id="c-numeros">—</dd></div>
+        <div><dt>reportes en 24 h</dt><dd id="c-24h">—</dd></div>
+        <div><dt>de riesgo alto</dt><dd id="c-alto">—</dd></div>
+      </dl>
+    </div>
+
+    <!-- Teléfono con la pantalla de llamada entrante -->
+    <div class="telefono" aria-live="polite">
+      <div class="pantalla" id="pantalla" data-nivel="espera">
+        <div class="pant-sup"><span id="hora">--:--</span><span>Centinela activo</span></div>
+        <p class="estado-llamada" id="estado-llamada">Esperando un número</p>
+        <p class="caller" id="caller">· · · · · · · · · ·</p>
+        <p class="pais" id="pais">Escribe un número para identificarlo</p>
+
+        <div class="medidor">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="pista" cx="60" cy="60" r="50"/>
+            <circle class="arco" id="arco" cx="60" cy="60" r="50"/>
+          </svg>
+          <div class="medidor-centro"><strong id="score">–</strong><span>de 100</span></div>
+        </div>
+
+        <p class="veredicto" id="veredicto">Sin datos todavía</p>
+        <p class="detalle" id="detalle"></p>
+
+        <div class="acciones-tel">
+          <a href="#reportar" class="tel-btn reportar" id="btn-ir-reportar">Reportar</a>
+          <span class="tel-btn colgar" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 15.5c5-4.6 13-4.6 18 0l-2.2 2.6-3.6-1.6v-2.8a11 11 0 0 0-6.4 0v2.8l-3.6 1.6z"/></svg>
+          </span>
+        </div>
+        <p class="atendio" id="atendio"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORTAR -->
+  <section class="seccion" id="reportar">
+    <div class="seccion-cab">
+      <h2>Reporta una llamada sospechosa</h2>
+      <p>Tu reporte es anónimo: no guardamos tu nombre ni tu IP. Si describes la llamada, la IA de Centinela la clasifica sola.</p>
+    </div>
+    <form id="form-reporte" class="reporte" autocomplete="off">
+      <div class="campo">
+        <label for="r-numero">Número que te llamó</label>
+        <input id="r-numero" inputmode="tel" placeholder="Ej. 300 123 4567 o +1 809 555 0101" required maxlength="22">
+      </div>
+      <fieldset class="campo">
+        <legend>¿Qué tipo de llamada fue? <span class="opcional">(opcional)</span></legend>
+        <div class="chips" id="chips">
+          <label><input type="radio" name="cat" value="estafa"><span>Estafa</span></label>
+          <label><input type="radio" name="cat" value="suplantacion"><span>Falso banco o entidad</span></label>
+          <label><input type="radio" name="cat" value="cobranza"><span>Cobranza</span></label>
+          <label><input type="radio" name="cat" value="telemarketing"><span>Venta / telemarketing</span></label>
+          <label><input type="radio" name="cat" value="wangiri"><span>Llamada perdida internacional</span></label>
+          <label><input type="radio" name="cat" value="extorsion"><span>Extorsión</span></label>
+          <label><input type="radio" name="cat" value="encuesta"><span>Encuesta</span></label>
+          <label><input type="radio" name="cat" value="otro"><span>Otro</span></label>
+        </div>
+      </fieldset>
+      <div class="campo">
+        <label for="r-desc">¿Qué te dijeron? <span class="opcional">(opcional)</span></label>
+        <textarea id="r-desc" rows="3" maxlength="500" placeholder="Ej. Dijeron que eran de mi banco y me pidieron el código que llegó por SMS."></textarea>
+      </div>
+      <div class="reporte-pie">
+        <button type="submit" class="btn-principal">Enviar reporte</button>
+        <p class="resultado" id="r-resultado" role="status"></p>
+      </div>
+    </form>
+  </section>
+
+  <!-- COMUNIDAD -->
+  <section class="seccion" id="comunidad">
+    <div class="seccion-cab">
+      <h2>Lo que está reportando la comunidad</h2>
+      <p>Se actualiza solo cada 30 segundos.</p>
+    </div>
+    <div class="comunidad">
+      <div class="bloque">
+        <h3>Más reportados</h3>
+        <ol class="top" id="top"><li class="vacio">Cargando…</li></ol>
+      </div>
+      <div class="bloque">
+        <h3>Tipos de llamada</h3>
+        <ul class="barras" id="categorias"><li class="vacio">Cargando…</li></ul>
+        <h3 class="sub">Últimos 14 días</h3>
+        <div class="dias" id="dias" aria-label="Reportes por día"></div>
+      </div>
+      <div class="bloque">
+        <h3>Últimos reportes</h3>
+        <ul class="feed" id="feed"><li class="vacio">Cargando…</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLÚSTER -->
+  <section class="seccion cluster-sec" id="cluster">
+    <div class="seccion-cab">
+      <h2>El clúster, en vivo</h2>
+      <p>Centinela corre en dos computadores viejos unidos por Tailscale. Si el principal se apaga, el de respaldo atiende en segundos y nadie lo nota.</p>
+    </div>
+
+    <div class="aviso-failover" id="aviso-failover" hidden></div>
+
+    <div class="nodos">
+      <article class="nodo" id="nodo-JE" data-estado="cargando">
+        <header>
+          <h3>JE <small>principal · todo‑en‑uno AMD Athlon</small></h3>
+          <span class="estado">—</span>
+        </header>
+        <svg class="ecg" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30 H110 l8 -18 l10 36 l8 -26 l6 8 H300"/></svg>
+        <dl class="metricas">
+          <div><dt>Latencia</dt><dd data-m="lat">—</dd></div>
+          <div><dt>CPU</dt><dd data-m="cpu">—</dd></div>
+          <div><dt>RAM</dt><dd data-m="ram">—</dd></div>
+          <div><dt>Temp.</dt><dd data-m="temp">—</dd></div>
+          <div><dt>Base de datos</dt><dd data-m="db">—</dd></div>
+          <div><dt>Encendido hace</dt><dd data-m="up">—</dd></div>
+        </dl>
+      </article>
+      <article class="nodo" id="nodo-JP" data-estado="cargando">
+        <header>
+          <h3>JP <small>respaldo · laptop</small></h3>
+          <span class="estado">—</span>
+        </header>
+        <svg class="ecg" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30 H110 l8 -18 l10 36 l8 -26 l6 8 H300"/></svg>
+        <dl class="metricas">
+          <div><dt>Latencia</dt><dd data-m="lat">—</dd></div>
+          <div><dt>CPU</dt><dd data-m="cpu">—</dd></div>
+          <div><dt>RAM</dt><dd data-m="ram">—</dd></div>
+          <div><dt>Temp.</dt><dd data-m="temp">—</dd></div>
+          <div><dt>Base de datos</dt><dd data-m="db">—</dd></div>
+          <div><dt>Encendido hace</dt><dd data-m="up">—</dd></div>
+        </dl>
+      </article>
+    </div>
+
+    <div class="arquitectura">
+      <figure class="diagrama" aria-label="Recorrido de una consulta">
+        <div class="paso"><b>Tú</b><span>web o Telegram</span></div>
+        <div class="flecha" aria-hidden="true"></div>
+        <div class="paso"><b>Cloudflare</b><span>elige el nodo vivo</span></div>
+        <div class="flecha" aria-hidden="true"></div>
+        <div class="paso" id="diag-nodo"><b>JE / JP</b><span>API Centinela</span></div>
+        <div class="flecha" aria-hidden="true"></div>
+        <div class="paso"><b>Supabase</b><span>base de datos</span></div>
+        <div class="paso ia" id="diag-ia"><b>IA local</b><span>Ollama · qwen2.5</span></div>
+      </figure>
+      <div class="bitacora">
+        <h3>Bitácora del clúster</h3>
+        <ul id="eventos"><li class="vacio">Cargando…</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROTEGERTE -->
+  <section class="seccion" id="protegerte">
+    <div class="seccion-cab">
+      <h2>Cómo protegerte</h2>
+    </div>
+    <div class="consejos">
+      <p><b>Tu banco nunca te pide claves por teléfono.</b> Ni la clave, ni el código que llega por SMS, ni los datos completos de la tarjeta. Si te los piden, cuelga y llama tú al número que aparece detrás de tu tarjeta.</p>
+      <p><b>No devuelvas llamadas perdidas de números extranjeros.</b> Prefijos como +225, +233 o +1 809 se usan para cobrarte la llamada a tarifa premium.</p>
+      <p><b>La urgencia es una señal de alarma.</b> "Tu cuenta será bloqueada hoy", "tu familiar está detenido": la prisa busca que no pienses.</p>
+      <p><b>Reporta aunque no hayas caído.</b> Con tres reportes de personas distintas, un número pasa a riesgo alto y protege a los demás.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="pie">
+  <p><b>Centinela</b> · Proyecto de Sistemas Distribuidos · Ingeniería de Sistemas, 8.º semestre · Grupo JE &amp; JP</p>
+  <p class="pie-tec">Linux Mint en consola · Tailscale Funnel · Cloudflare Workers · Supabase · Ollama · n8n · Telegram</p>
+</footer>
+
+<!-- CHATBOT -->
+<button class="chat-abrir" id="chat-abrir" aria-expanded="false" aria-controls="chat">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
+  <span>Pregúntale a Centinela</span>
+</button>
+<section class="chat" id="chat" hidden aria-label="Chat con Centinela">
+  <header>
+    <div><b>Centinela IA</b><small id="chat-estado">Responde con IA local</small></div>
+    <button class="chat-cerrar" id="chat-cerrar" aria-label="Cerrar chat">×</button>
+  </header>
+  <div class="chat-msgs" id="chat-msgs">
+    <p class="msg bot">Hola. Pégame un número que te llamó o pregúntame cómo reconocer una estafa telefónica.</p>
+  </div>
+  <form class="chat-form" id="chat-form" autocomplete="off">
+    <label for="chat-txt" class="sr">Mensaje</label>
+    <input id="chat-txt" placeholder="Ej. ¿Contesto el 300 123 4567?" maxlength="600" required>
+    <button type="submit">Enviar</button>
+  </form>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>

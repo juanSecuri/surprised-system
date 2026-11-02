@@ -3,11 +3,10 @@ main = "worker.js"
 compatibility_date = "2025-10-01"
 
 [vars]
-# Cambia TU-TAILNET por el tuyo (lo muestra `tailscale funnel status` en cada servidor)
 NODO_PRINCIPAL = "https://centinela-je.tailaf5c0b.ts.net"
 NODO_RESPALDO  = "https://centinela-jp.tailaf5c0b.ts.net"
 
-# Fase 2: la web se publica junto al gateway (un solo link para todo)
-# [assets]
-# directory = "../web"
-# binding = "ASSETS"
+# La web se publica junto al gateway (un solo link para todo)
+[assets]
+directory = "../web"
+binding = "ASSETS"

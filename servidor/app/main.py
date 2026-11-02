@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 NODO = os.getenv("NODO_NOMBRE", "JE")
 ROL = os.getenv("NODO_ROL", "principal")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -195,16 +195,17 @@ def recalcular(conn, numero: str):
     r = conn.execute("""
         select count(*) total,
                count(distinct coalesce(reportero, id::text)) unicos,
-               max(creado) ultimo,
+               max(creado) ultimo, min(creado) primero,
                mode() within group (order by categoria) cat
         from reportes where numero = %s""", (numero,)).fetchone()
     n = conn.execute("select verificado from numeros where numero=%s", (numero,)).fetchone()
     dias = (datetime.now(timezone.utc) - r["ultimo"]).days if r["ultimo"] else 999
     score = calcular_score(r["unicos"], dias, numero, n["verificado"] if n else False)
     conn.execute("""update numeros set score=%s, nivel=%s, total_reportes=%s, reporteros_unicos=%s,
-                    categoria_principal=%s, ultimo_reporte=coalesce(%s, ultimo_reporte)
+                    categoria_principal=%s, ultimo_reporte=coalesce(%s, ultimo_reporte),
+                    primer_reporte=coalesce(%s, primer_reporte)
                     where numero=%s""",
-                 (score, nivel_de(score), r["total"], r["unicos"], r["cat"], r["ultimo"], numero))
+                 (score, nivel_de(score), r["total"], r["unicos"], r["cat"], r["ultimo"], r["primero"], numero))
 
 
 def guardar_reporte(p: dict) -> int:
@@ -286,9 +287,16 @@ def clasificar_con_ia(reporte_id: int, numero: str, descripcion: str):
     if not descripcion or not ollama_disponible():
         return
     try:
-        system = ("Eres un analista antifraude telefónico en Colombia. Clasifica el reporte en UNA "
-                  f"categoría de esta lista: {', '.join(CATEGORIAS)}. Responde SOLO JSON: "
-                  '{"categoria": "...", "resumen": "frase corta en español"}')
+        system = ("Eres un analista antifraude telefónico en Colombia. Clasifica el reporte en UNA categoría:\n"
+                  "- suplantacion: dicen ser de un banco, entidad, empresa o autoridad para pedir claves, códigos o datos\n"
+                  "- estafa: premios falsos, inversiones, falsos familiares en apuros, ventas engañosas para robar dinero\n"
+                  "- extorsion: amenazas, intimidación, exigen dinero bajo presión\n"
+                  "- cobranza: cobran deudas o cuotas\n"
+                  "- telemarketing: ofrecen productos, planes, créditos o servicios\n"
+                  "- encuesta: encuestas o estudios de opinión\n"
+                  "- wangiri: timbran una vez desde el extranjero para que devuelvas la llamada\n"
+                  "- otro: nada de lo anterior\n"
+                  'Responde SOLO JSON: {"categoria": "...", "resumen": "frase corta en español, sin punto final"}')
         res = json.loads(ollama_chat(system, f"Número: {numero}\nReporte: {descripcion}", json_mode=True))
         cat = res.get("categoria", "otro").lower().strip()
         cat = cat if cat in CATEGORIAS else "otro"
