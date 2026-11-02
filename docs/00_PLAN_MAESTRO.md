@@ -78,15 +78,25 @@ Cada persona que recibe una llamada rara la reporta (web, Telegram o automática
 
 ---
 
-## 3. Lo que ya está hecho (en esta carpeta)
+## 3. Estado actual
+
+**En producción (2026‑11‑02):**
+- Gateway: `https://centinela.juan-gallego-sec.workers.dev`
+- JE: `https://centinela-je.tailaf5c0b.ts.net` — Mint 22.2 en consola, RAM 63 % → 17 %
+- JP: `https://centinela-jp.tailaf5c0b.ts.net` (pendiente de instalar)
+- IA: `centinela-ia` (100.87.246.120), Ollama qwen2.5:7b
+- BD: Supabase (US West), proyecto `centinela`
+- Prueba extremo a extremo OK: reporte → clasificación IA → chatbot con `fuente: ollama`. Latencia gateway 0.6‑1.9 s.
+
+### Archivos
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
 | `db/schema.sql` | Tablas numeros, reportes, nodos, eventos | ✅ probado en PostgreSQL 16 |
 | `servidor/app/` | API FastAPI del nodo (11 rutas) | ✅ probado: 2 nodos, failover, modo degradado, IA |
-| `servidor/instalar_nodo.sh` | Convierte Mint XFCE en servidor (JE o JP) en un comando | ✅ sintaxis verificada · ⏳ falta correrlo en JE |
+| `servidor/instalar_nodo.sh` | Convierte Mint XFCE en servidor (JE o JP) en un comando | ✅ JE instalado (2026‑11‑02) · ⏳ JP |
 | `gateway/` | Cloudflare Worker con failover | ✅ probado: apagando JE responde JP |
-| `ia/instalar_ollama.sh` | Ollama + Tailscale en Omarchy | ⏳ correr en el PC personal |
+| `ia/instalar_ollama.sh` | Ollama + Tailscale en Omarchy | ✅ `centinela-ia` con qwen2.5:7b |
 | `ia/instalar_n8n.sh` | n8n + webhook público para Telegram | ⏳ fase 3 |
 
 ### Rutas de la API

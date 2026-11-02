@@ -8,5 +8,8 @@ cp servidor/app/main.py servidor/app/requirements.txt /opt/centinela/
 /opt/centinela/venv/bin/pip install -q -r /opt/centinela/requirements.txt
 chown -R centinela:centinela /opt/centinela
 systemctl restart centinela
-sleep 3
-curl -s localhost:8000/health && echo && echo "✔ Actualizado"
+for i in $(seq 1 20); do
+  if curl -sf localhost:8000/health; then echo; echo "✔ Actualizado"; exit 0; fi
+  sleep 1
+done
+echo "✘ La API no respondió en 20 s. Revisa: journalctl -u centinela -n 30 --no-pager"; exit 1
