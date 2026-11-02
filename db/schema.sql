@@ -58,9 +58,22 @@ create table if not exists eventos (
 );
 create index if not exists idx_eventos_creado on eventos(creado desc);
 
+-- Llamadas reales que avisa el celular (MacroDroid / Atajos)
+create table if not exists llamadas (
+    id          bigserial primary key,
+    numero      text,
+    dispositivo text,
+    score       int,
+    nivel       text,
+    nodo        text,
+    creado      timestamptz not null default now()
+);
+create index if not exists idx_llamadas_creado on llamadas(creado desc);
+
 -- Seguridad: activar RLS sin políticas bloquea la API REST pública de Supabase
 -- (clave anon). Nuestros servidores entran con el usuario postgres, que no se ve afectado.
 alter table numeros  enable row level security;
 alter table reportes enable row level security;
 alter table nodos    enable row level security;
 alter table eventos  enable row level security;
+alter table llamadas enable row level security;

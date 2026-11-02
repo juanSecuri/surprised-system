@@ -145,6 +145,8 @@ h3 { font-size: 18px; font-weight: 700; }
 .pantalla[data-nivel="alto"]  { --fondo-a: #8A1325; --fondo-b: #33070F; --acento: #FF8A98; }
 .pantalla::before { content: ""; width: 90px; height: 24px; border-radius: 20px; background: #0D1220; position: absolute; top: 10px; left: 50%; translate: -50% 0; }
 .pant-sup { width: 100%; display: flex; justify-content: space-between; font-size: 12px; opacity: .75; margin-top: 18px; font-variant-numeric: tabular-nums; }
+.en-vivo { margin: 18px 0 -18px; padding: 4px 12px; border-radius: 999px; background: #E5343F; color: #fff; font-size: 12px; font-weight: 700; animation: timbre 1s ease-in-out infinite; }
+.en-vivo[hidden] { display: none; }
 .estado-llamada { margin: 34px 0 4px; font-size: 14px; opacity: .8; }
 .pantalla[data-nivel]:not([data-nivel="espera"]) .estado-llamada { animation: timbre 1.2s ease-in-out 3; }
 @keyframes timbre { 50% { opacity: .35; } }

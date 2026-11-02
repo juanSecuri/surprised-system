@@ -1,0 +1,110 @@
+{
+  "name": "Centinela · Bot de Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "b464d398-1e6f-4473-95db-abb2dc72d2b4",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "f565f63a-34c6-4f65-817b-d711b20953f5"
+    },
+    {
+      "parameters": {
+        "operation": "sendChatAction",
+        "chatId": "={{ $json.message.chat.id }}",
+        "action": "typing"
+      },
+      "id": "b02659da-713a-4417-a73b-6c0cfd93cf0f",
+      "name": "Escribiendo…",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        120
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://centinela.juan-gallego-sec.workers.dev/api/bot",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.message.chat.id, texto: $json.message.text || $json.message.caption || null, contacto: $json.message.contact ? $json.message.contact.phone_number : null, nombre: $json.message.from.first_name }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "e639e2a3-3ecf-4e55-8ea6-2f247bcb3a7d",
+      "name": "Preguntar a Centinela",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.respuesta || '⚠️ Los servidores de Centinela no respondieron. Intenta de nuevo en un momento.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0c688c8f-7ce0-4bfc-a95c-6696966b7a67",
+      "name": "Responder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        520,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Preguntar a Centinela",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Escribiendo…",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preguntar a Centinela": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "pinData": {}
+}

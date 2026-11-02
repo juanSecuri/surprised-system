@@ -341,8 +341,31 @@ $("#chat-form").addEventListener("submit", async (e) => {
   msgs.scrollTop = msgs.scrollHeight;
 });
 
+/* ---------- llamadas reales en vivo ----------
+   Cuando el celular del proyecto recibe una llamada, MacroDroid/Atajos avisa a /api/llamada
+   y aquí aparece en el teléfono de la página en menos de 4 segundos. */
+let ultimaLlamada = null;
+async function vigilarLlamadas() {
+  try {
+    const { data, nodo } = await pedir("/api/llamadas?limite=1");
+    const l = data[0];
+    if (!l) { ultimaLlamada = ultimaLlamada ?? 0; return; }
+    if (ultimaLlamada === null) { ultimaLlamada = l.id; return; }   // no repetir llamadas viejas al abrir
+    if (l.id === ultimaLlamada || l.segundos > 120) return;
+    ultimaLlamada = l.id;
+    pintarPantalla({ ...l, conocido: !!l.total_reportes }, l.nodo || nodo);
+    $("#estado-llamada").textContent = "Llamada real entrante";
+    $("#en-vivo").hidden = false;
+    setTimeout(() => { $("#en-vivo").hidden = true; }, 60000);
+    if (window.scrollY > 400) {
+      $("#pulso-txt").textContent = "📞 Llamada entrante";
+    }
+  } catch { /* opcional: si falla, la web sigue normal */ }
+}
+
 /* ---------- arranque ---------- */
 cargarCluster(); cargarComunidad(); cargarEventos();
 setInterval(cargarCluster, 5000);
 setInterval(cargarComunidad, 30000);
 setInterval(cargarEventos, 15000);
+vigilarLlamadas(); setInterval(vigilarLlamadas, 4000);

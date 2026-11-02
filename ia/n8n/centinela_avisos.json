@@ -1,0 +1,187 @@
+{
+  "name": "Centinela · Avisos automáticos",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "5fe09875-e867-443b-ae56-18154852cad5",
+      "name": "Todos los días 7:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://centinela.juan-gallego-sec.workers.dev/api/bot/resumen",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c39b7f9f-f3a1-49fe-924b-0be7c446c1a6",
+      "name": "Pedir resumen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "TU_CHAT_ID",
+        "text": "={{ $json.respuesta }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "33032c93-2c33-4ba3-b8aa-067544497e21",
+      "name": "Enviar resumen",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "d249b0b4-c046-4e15-9ab4-2d0cbcb5e601",
+      "name": "Cada 2 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://centinela.juan-gallego-sec.workers.dev/gateway/estado",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "73558b43-d5d2-4675-9dfb-9e149ed61bc1",
+      "name": "Estado del clúster",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        260
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Avisa solo cuando cambia el servidor que atiende (JE → JP, JP → JE, o caída total)\nconst memoria = $getWorkflowStaticData('global');\nconst estado = $input.first().json;\nconst activo = estado.activo || 'NINGUNO';\nconst anterior = memoria.activo;\nmemoria.activo = activo;\nif (anterior === undefined || anterior === activo) return [];\nconst hora = new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour12: false });\nlet msg;\nif (activo === 'JP') msg = `⚠️ ${hora} · JE dejó de responder. JP tomó el control y el servicio sigue funcionando.`;\nelse if (activo === 'JE') msg = `✅ ${hora} · JE volvió y retomó como servidor principal.`;\nelse msg = `🚨 ${hora} · Ningún servidor responde. Revisa JE y JP.`;\nreturn [{ json: { respuesta: msg } }];"
+      },
+      "id": "88a3ec96-6346-4605-a10f-da2d8bca6d0f",
+      "name": "¿Cambió el servidor?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "TU_CHAT_ID",
+        "text": "={{ $json.respuesta }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "cac52c85-df6e-49a8-90cd-fafa4469fcff",
+      "name": "Enviar alerta",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        780,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Todos los días 7:00": {
+      "main": [
+        [
+          {
+            "node": "Pedir resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir resumen": {
+      "main": [
+        [
+          {
+            "node": "Enviar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada 2 minutos": {
+      "main": [
+        [
+          {
+            "node": "Estado del clúster",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estado del clúster": {
+      "main": [
+        [
+          {
+            "node": "¿Cambió el servidor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Cambió el servidor?": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "pinData": {}
+}

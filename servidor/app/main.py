@@ -16,11 +16,12 @@ import httpx
 import psutil
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 NODO = os.getenv("NODO_NOMBRE", "JE")
 ROL = os.getenv("NODO_ROL", "principal")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -28,6 +29,10 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://centinela-ia:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 LOCAL_DB = os.getenv("LOCAL_DB", os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.db"))
 SAL = os.getenv("SAL_HASH", "centinela")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_API = os.getenv("TELEGRAM_API", "https://api.telegram.org")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")      # a quién avisar de llamadas reales
+LLAMADAS_TOKEN = os.getenv("LLAMADAS_TOKEN", "")          # clave que usa el celular para avisar
 # Neon (plan gratis) apaga la BD tras 5 min sin uso y cobra horas de cómputo:
 # con Neon se late cada 15 min y no se dejan conexiones abiertas.
 ES_NEON = "neon.tech" in DATABASE_URL
@@ -446,16 +451,16 @@ def consultar(numero: str):
     return ficha(normalizar(numero))
 
 
-@app.post("/api/reportar")
-def reportar(r: Reporte, request: Request, bg: BackgroundTasks):
-    ip = ip_cliente(request)
-    limitar(ip)
-    numero = normalizar(r.numero)
-    cat = (r.categoria or "").lower().strip() or None
+def registrar_reporte(numero_raw: str, categoria: str | None, descripcion: str | None, canal: str,
+                      reportero: str, bg: BackgroundTasks) -> dict:
+    """Núcleo compartido por la web, Telegram y el celular."""
+    limitar(reportero)
+    numero = normalizar(numero_raw)
+    cat = (categoria or "").lower().strip() or None
     if cat and cat not in CATEGORIAS:
         raise HTTPException(422, f"Categoría inválida. Usa: {', '.join(CATEGORIAS)}")
-    p = {"numero": numero, "categoria": cat, "descripcion": (r.descripcion or "").strip() or None,
-         "canal": r.canal, "reportero": hash_reportero(r.reportero_id or ip), "nodo": NODO,
+    p = {"numero": numero, "categoria": cat, "descripcion": (descripcion or "").strip() or None,
+         "canal": canal, "reportero": hash_reportero(reportero), "nodo": NODO,
          "creado": datetime.now(timezone.utc).isoformat()}
     try:
         rid = guardar_reporte(p)
@@ -468,6 +473,12 @@ def reportar(r: Reporte, request: Request, bg: BackgroundTasks):
             c.execute("insert into pendientes (payload) values (?)", (json.dumps(p),))
         return {"ok": True, "modo": "degradado", "nodo": NODO,
                 "mensaje": "Recibido. Se sincronizará con la nube apenas vuelva la conexión."}
+
+
+@app.post("/api/reportar")
+def reportar(r: Reporte, request: Request, bg: BackgroundTasks):
+    return registrar_reporte(r.numero, r.categoria, r.descripcion, r.canal,
+                             r.reportero_id or ip_cliente(request), bg)
 
 
 @app.get("/api/top")
@@ -560,3 +571,193 @@ def chat(c: Chat):
         except Exception as e:
             log.warning("Ollama falló, respondo con reglas: %s", e)
     return {"respuesta": respuesta_reglas(fichas, st), "fuente": "reglas", "nodo": NODO, "numeros": fichas}
+
+
+# ================================================================ Telegram y llamadas reales
+
+EMOJI = {"alto": "🔴", "medio": "🟠", "bajo": "🟢"}
+CONSEJOS = [
+    "Tu banco nunca te pide claves ni el código que llega por SMS. Si te lo piden, cuelga.",
+    "No devuelvas llamadas perdidas de números extranjeros: pueden cobrarte tarifa premium.",
+    "Si te meten prisa (\"tu cuenta se bloquea hoy\"), es una señal de estafa. Cuelga y verifica.",
+    "\"Tu familiar está detenido y necesita plata\": cuelga y llama tú a tu familiar.",
+    "Reporta aunque no hayas caído: tres reportes ponen un número en riesgo alto para todos.",
+]
+
+
+def formato(n: str) -> str:
+    m = re.match(r"^\+57(\d{3})(\d{3})(\d{4})$", n or "")
+    return f"+57 {m[1]} {m[2]} {m[3]}" if m else (n or "")
+
+
+def enmascarar(n: str) -> str:
+    """Para la web pública: +57 300 ••• 4567 (protege a contactos legítimos)."""
+    n = n or ""
+    for pref in ("+57", "+1"):
+        if n.startswith(pref) and len(n) >= len(pref) + 7:
+            resto = n[len(pref):]
+            return f"{pref} {resto[:3]} ••• {resto[-4:]}"
+    return f"{n[:4]} ••• {n[-4:]}" if len(n) > 8 else "Número oculto"
+
+
+CAT_TXT = {"estafa": "estafa", "suplantacion": "falso banco o entidad", "cobranza": "cobranza",
+           "telemarketing": "ventas / telemarketing", "wangiri": "llamada perdida internacional",
+           "extorsion": "extorsión", "encuesta": "encuesta", "otro": "otro"}
+
+
+def texto_ficha(f: dict) -> str:
+    nivel = f.get("nivel", "bajo")
+    lineas = [f"{EMOJI.get(nivel, '⚪')} {formato(f['numero'])} · {f.get('pais', '')}",
+              f"Riesgo {nivel} ({f.get('score', 0)}/100)"]
+    if f.get("total_reportes"):
+        cat = f.get("categoria_principal")
+        lineas.append(f"{f['total_reportes']} reporte(s)" + (f", casi siempre: {CAT_TXT.get(cat, cat)}" if cat else ""))
+        if f.get("resumen_ia"):
+            lineas.append(f"IA: {f['resumen_ia']}")
+    else:
+        lineas.append("Nadie lo ha reportado todavía.")
+    lineas.append({"alto": "👉 Mejor no contestes y bloquéalo.",
+                   "medio": "👉 Contesta con cuidado y no des datos."}.get(nivel, "👉 Parece tranquilo."))
+    return "\n".join(lineas)
+
+
+def telegram_enviar(texto: str, chat_id: str | int | None = None):
+    destino = chat_id or TELEGRAM_CHAT_ID
+    if not TELEGRAM_TOKEN or not destino:
+        return
+    try:
+        httpx.post(f"{TELEGRAM_API}/bot{TELEGRAM_TOKEN}/sendMessage",
+                   json={"chat_id": destino, "text": texto, "disable_web_page_preview": True}, timeout=8)
+    except Exception as e:
+        log.warning("No se pudo enviar a Telegram: %s", e)
+
+
+class Llamada(BaseModel):
+    numero: str = Field("", max_length=40)
+    dispositivo: str = Field("celular", max_length=40)
+
+
+@app.post("/api/llamada")
+def llamada_entrante(l: Llamada, request: Request, bg: BackgroundTasks):
+    """El celular avisa que está entrando una llamada (MacroDroid en Android / Atajo en iPhone)."""
+    token = request.headers.get("x-centinela-token") or request.query_params.get("token")
+    if not LLAMADAS_TOKEN or token != LLAMADAS_TOKEN:
+        raise HTTPException(401, "Token de llamadas inválido")
+    if len(re.sub(r"\D", "", l.numero)) < 3:
+        f = {"numero": None, "nivel": "medio", "score": 40, "pais": "Oculto", "total_reportes": 0}
+        aviso = "📞 Llamada de número oculto o privado.\n🟠 No se puede verificar: si contestas, no des datos."
+    else:
+        f = ficha(normalizar(l.numero))
+        aviso = "📞 Te está llamando:\n" + texto_ficha(f)
+    try:
+        q("""insert into llamadas (numero, dispositivo, score, nivel, nodo) values (%s,%s,%s,%s,%s)""",
+          (f["numero"], l.dispositivo, f.get("score"), f.get("nivel"), NODO))
+    except Exception as e:
+        log.warning("No se pudo guardar la llamada: %s", e)
+    bg.add_task(telegram_enviar, aviso)
+    corto = {"alto": "🔴 NO CONTESTES · riesgo alto", "medio": "🟠 Cuidado · riesgo medio"}.get(f.get("nivel"), "🟢 Riesgo bajo")
+    if request.query_params.get("formato") == "texto":      # para la notificación de MacroDroid
+        extra = f" · {CAT_TXT.get(f.get('categoria_principal'), '')}" if f.get("categoria_principal") else ""
+        return PlainTextResponse(f"{corto} ({f.get('score')}/100){extra}")
+    return {"ok": True, "nodo": NODO, "numero": f["numero"], "nivel": f.get("nivel"),
+            "score": f.get("score"), "notificacion": f"{corto} ({f.get('score')}/100)"}
+
+
+@app.get("/api/llamadas")
+def llamadas(limite: int = 5):
+    filas = q("""select l.id, l.numero, l.dispositivo, l.score, l.nivel, l.nodo, l.creado,
+                        n.pais, n.total_reportes, n.categoria_principal, n.resumen_ia
+                 from llamadas l left join numeros n using (numero)
+                 order by l.creado desc limit %s""", (min(limite, 20),), todos=True)
+    for f in filas:
+        # los números con reportes ya son públicos; los demás se enmascaran
+        if not f["numero"]:
+            f["numero"] = "Número oculto"
+        elif (f["score"] or 0) < 25 and not f["total_reportes"]:
+            f["numero"] = enmascarar(f["numero"])
+        f["segundos"] = int((datetime.now(timezone.utc) - f["creado"]).total_seconds())
+    return filas
+
+
+class MensajeBot(BaseModel):
+    chat_id: int | str
+    texto: str | None = Field(None, max_length=1000)
+    contacto: str | None = Field(None, max_length=40)
+    nombre: str | None = Field(None, max_length=80)
+
+
+AYUDA = ("🛡️ Soy Centinela, tu escudo contra llamadas spam y estafas.\n\n"
+         "• Envíame un número (ej. 3001234567) y te digo si es peligroso.\n"
+         "• También puedes compartirme un contacto.\n"
+         "• /reportar 3001234567 lo que te dijeron → reporta una llamada\n"
+         "• /top → los números más reportados\n"
+         "• /stats → cifras de la comunidad\n"
+         "• /estado → qué servidor te está atendiendo\n"
+         "• /miid → tu chat_id (para recibir alertas)\n"
+         "• O pregúntame lo que quieras sobre estafas telefónicas 💬")
+
+
+@app.post("/api/bot")
+def bot(m: MensajeBot, bg: BackgroundTasks):
+    """Cerebro del bot de Telegram: n8n le pasa el mensaje y reenvía la respuesta."""
+    t = (m.contacto or m.texto or "").strip()
+    cmd, _, resto = t.partition(" ")
+    cmd = cmd.lower().split("@")[0]
+    try:
+        if not t or cmd in ("/start", "/ayuda", "/help"):
+            saludo = f"Hola {m.nombre} 👋\n" if m.nombre and cmd == "/start" else ""
+            r = saludo + AYUDA
+        elif cmd == "/miid":
+            r = f"Tu chat_id es: {m.chat_id}\nPonlo como TELEGRAM_CHAT_ID en los servidores para recibir las alertas de llamadas."
+        elif cmd == "/top":
+            filas = top(5)
+            r = "🔝 Más reportados:\n\n" + "\n".join(
+                f"{i}. {EMOJI.get(f['nivel'], '⚪')} {formato(f['numero'])} · {f['score']}/100 · {CAT_TXT.get(f['categoria_principal'], 'sin clasificar')}"
+                for i, f in enumerate(filas, 1)) if filas else "Todavía no hay reportes."
+        elif cmd == "/stats":
+            st = stats()
+            cats = ", ".join(f"{CAT_TXT.get(c['categoria'], c['categoria'])} {c['total']}" for c in st["por_categoria"][:4])
+            r = (f"📊 Centinela hoy\n• {st['numeros']} números vigilados\n• {st['reportes']} reportes en total\n"
+                 f"• {st['reportes_24h']} en las últimas 24 h\n• {st['alto_riesgo']} de riesgo alto\n• Tipos: {cats}")
+        elif cmd == "/estado":
+            c = cluster()
+            lineas = [f"{'🟢' if n['online'] else '🔴'} {n['nombre']} ({n['rol']}) · CPU {round(n['cpu'] or 0)}% · RAM {round(n['ram'] or 0)}%"
+                      for n in c["nodos"]]
+            r = (f"🖥️ Te atendió: {NODO}\n" + "\n".join(lineas) +
+                 f"\n🧠 IA local: {'activa' if c['ollama'] else 'en pausa'}")
+        elif cmd == "/reportar":
+            nums = RE_NUM.findall(resto)
+            if not nums:
+                r = "Escribe así: /reportar 3001234567 me dijeron que eran del banco"
+            else:
+                desc = resto.replace(nums[0], "", 1).strip() or None
+                res = registrar_reporte(nums[0], None, desc, "telegram", f"tg:{m.chat_id}", bg)
+                if res["modo"] == "degradado":
+                    r = "✅ Reporte recibido. Se sincroniza apenas vuelva la conexión con la base de datos."
+                else:
+                    r = "✅ Gracias, reporte guardado.\n\n" + texto_ficha(res["numero"])
+                    if desc:
+                        r += "\n\n🧠 La IA está clasificando tu reporte."
+        elif RE_NUM.fullmatch(t) or (m.contacto and RE_NUM.search(t)):
+            r = texto_ficha(ficha(normalizar(RE_NUM.search(t).group())))
+        else:
+            r = chat(Chat(mensaje=t[:600]))["respuesta"]
+    except HTTPException as e:
+        r = "Ese número no parece válido. Revísalo e intenta de nuevo." if e.status_code == 422 else \
+            "Vas muy rápido 😅 Espera unos minutos para reportar otra vez." if e.status_code == 429 else \
+            "No pude procesar eso. Intenta de nuevo."
+    except Exception as e:
+        log.warning("Bot: %s", e)
+        r = "⚠️ Tuve un problema consultando la base de datos. Intenta en un momento."
+    return {"respuesta": r, "nodo": NODO}
+
+
+@app.get("/api/bot/resumen")
+def resumen_diario():
+    st = stats()
+    filas = top(3)
+    tope = "\n".join(f"{EMOJI.get(f['nivel'], '⚪')} {formato(f['numero'])} ({f['score']}/100)" for f in filas)
+    consejo = CONSEJOS[datetime.now().timetuple().tm_yday % len(CONSEJOS)]
+    return {"respuesta": (f"☀️ Buenos días. Así va Centinela:\n• {st['reportes_24h']} reportes en las últimas 24 h\n"
+                          f"• {st['numeros']} números vigilados, {st['alto_riesgo']} de riesgo alto\n\n"
+                          f"🔝 Más peligrosos:\n{tope or 'Sin datos'}\n\n💡 {consejo}")}
