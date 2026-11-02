@@ -1,0 +1,10 @@
+.env
+*.db
+*.sqlite
+__pycache__/
+venv/
+.venv/
+node_modules/
+.wrangler/
+.dev.vars
+*token*
