@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 NODO = os.getenv("NODO_NOMBRE", "JE")
 ROL = os.getenv("NODO_ROL", "principal")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -158,12 +158,20 @@ def q(sql: str, params=(), uno=False, todos=False):
         return None
 
 
+_db_estado = {"ok": False, "t": time.time()}  # el latido lo actualiza al arrancar
+
+
 def db_ok() -> bool:
+    """Estado de la BD en caché: lo actualiza el latido, así /health responde al instante."""
+    if time.time() - _db_estado["t"] < LATIDO_SEG + 10:
+        return _db_estado["ok"]
     try:
         q("select 1", uno=True)
-        return True
+        ok = True
     except Exception:
-        return False
+        ok = False
+    _db_estado.update(ok=ok, t=time.time())
+    return ok
 
 
 def local():
@@ -251,8 +259,8 @@ def ficha(numero: str) -> dict:
 _ollama_estado = {"ok": False, "t": 0.0}
 
 
-def ollama_disponible() -> bool:
-    if time.time() - _ollama_estado["t"] < 30:
+def ollama_disponible(forzar=False) -> bool:
+    if not forzar and time.time() - _ollama_estado["t"] < 60:
         return _ollama_estado["ok"]
     try:
         ok = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=2).status_code == 200
@@ -311,9 +319,18 @@ async def latido():
                     temp=excluded.temp, version=excluded.version, iniciado=excluded.iniciado,
                     ultimo_latido=now()""",
                 (NODO, ROL, ip, host, m["cpu"], m["ram"], m["disco"], m["temp"], VERSION, INICIO))
+            _db_estado.update(ok=True, t=time.time())
         except Exception as e:
+            _db_estado.update(ok=False, t=time.time())
             log.warning("Latido no enviado (Supabase caída?): %s", e)
         await asyncio.sleep(LATIDO_SEG)
+
+
+async def vigilar_ia():
+    """Revisa en segundo plano si Ollama responde, para no hacer esperar a los usuarios."""
+    while True:
+        await asyncio.to_thread(ollama_disponible, True)
+        await asyncio.sleep(20)
 
 
 def vaciar_bandeja() -> int:
@@ -347,7 +364,8 @@ async def lifespan(app: FastAPI):
         pool.open(wait=False)
     local().close()
     await asyncio.to_thread(evento, "arranque", f"Nodo {NODO} ({ROL}) v{VERSION} iniciado")
-    tareas = [asyncio.create_task(latido()), asyncio.create_task(sincronizador())]
+    tareas = [asyncio.create_task(latido()), asyncio.create_task(sincronizador()),
+              asyncio.create_task(vigilar_ia())]
     yield
     for t in tareas:
         t.cancel()
@@ -398,6 +416,11 @@ class Chat(BaseModel):
 @app.get("/")
 def raiz():
     return {"servicio": "Centinela", "nodo": NODO, "rol": ROL, "version": VERSION}
+
+
+@app.get("/ping")
+def ping():
+    return {"ok": True, "nodo": NODO}
 
 
 @app.get("/health")

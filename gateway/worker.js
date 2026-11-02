@@ -11,7 +11,8 @@
  * - Variables (wrangler.toml o panel de Cloudflare): NODO_PRINCIPAL, NODO_RESPALDO.
  */
 
-const TIMEOUT_MS = 4000;     // tiempo máximo para decidir que un nodo está caído
+const TIMEOUT_MS = 8000;     // tiempo máximo para decidir que un nodo está caído
+                             // (Funnel desde Colombia suele tardar 1-3 s; con 8 s no hay failovers falsos)
 const TIMEOUT_CHAT_MS = 90000; // la IA puede tardar en responder
 
 export default {
