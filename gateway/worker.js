@@ -19,14 +19,15 @@ const MAX_BODY = 4096;          // cuerpo máximo de una petición (bytes); cort
 // Escudo por IP: ventana deslizante en memoria del isolate. Es defensa en profundidad;
 // la barrera principal son las "Rate limiting rules" de Cloudflare (ver docs/09_BLINDAJE.md).
 const VENTANA_MS = 60000;
-const visitas = new Map();      // ip -> number[] (timestamps)
+const visitas = new Map();      // "cubeta:ip" -> number[] (timestamps)
 
-function limitado(ip, maximo) {
+// Cubetas separadas: el chat no comparte cupo con las consultas automáticas de la web.
+function limitado(clave, maximo) {
   const ahora = Date.now();
-  const cola = (visitas.get(ip) || []).filter((t) => ahora - t < VENTANA_MS);
+  const cola = (visitas.get(clave) || []).filter((t) => ahora - t < VENTANA_MS);
   cola.push(ahora);
-  visitas.set(ip, cola);
-  if (visitas.size > 5000) {     // tope de memoria: suelta la IP más antigua
+  visitas.set(clave, cola);
+  if (visitas.size > 8000) {     // tope de memoria: suelta la entrada más antigua
     visitas.delete(visitas.keys().next().value);
   }
   return cola.length > maximo;
@@ -41,9 +42,10 @@ export default {
     const esApi = url.pathname.startsWith("/api/") || url.pathname === "/health";
 
     if (esApi) {
-      const tope = url.pathname.startsWith("/api/chat")
-        ? Number(env.LIMITE_CHAT_MIN || 12) : Number(env.LIMITE_MIN || 100);
-      if (limitado(ip, tope)) {
+      const esChat = url.pathname.startsWith("/api/chat");
+      const cubeta = esChat ? "chat:" : "api:";
+      const tope = esChat ? Number(env.LIMITE_CHAT_MIN || 20) : Number(env.LIMITE_MIN || 200);
+      if (limitado(cubeta + ip, tope)) {
         return cors(json({ error: "Demasiadas peticiones. Espera un minuto." }, 429,
           { "Retry-After": "60" }));
       }
