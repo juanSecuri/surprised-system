@@ -88,7 +88,8 @@ async function vivo(n) {
 
 async function proxy(req, env, url) {
   const lista = nodos(env);
-  const esChat = url.pathname.startsWith("/api/chat");
+  // Rutas "lentas" (usan la IA): necesitan más tiempo y chequeo previo de salud.
+  const esLento = url.pathname.startsWith("/api/chat") || url.pathname.startsWith("/api/bot");
 
   let cuerpo;
   if (!["GET", "HEAD"].includes(req.method)) {
@@ -100,8 +101,8 @@ async function proxy(req, env, url) {
   const fallas = [];
 
   for (const n of lista) {
-    // Para el chat (lento) confirmamos primero con /health que el nodo está vivo
-    if (esChat) {
+    // Para rutas lentas confirmamos primero con /health que el nodo está vivo
+    if (esLento) {
       const v = await vivo(n);
       if (!v.online) { fallas.push(`${n.nombre}:${v.error}`); continue; }
     }
@@ -111,7 +112,7 @@ async function proxy(req, env, url) {
       h.set("X-Real-IP", req.headers.get("CF-Connecting-IP") || "");
       h.set("X-Centinela-Gateway", "1");
       const r = await conTimeout(n.base + url.pathname + url.search,
-        { method: req.method, headers: h, body: cuerpo }, esChat ? TIMEOUT_CHAT_MS : TIMEOUT_MS);
+        { method: req.method, headers: h, body: cuerpo }, esLento ? TIMEOUT_CHAT_MS : TIMEOUT_MS);
       // 5xx = nodo en problemas → probar el siguiente. 429 = el nodo frena al cliente: se respeta.
       if (r.status >= 500) { fallas.push(`${n.nombre}:HTTP ${r.status}`); continue; }
       const resp = new Response(r.body, r);
