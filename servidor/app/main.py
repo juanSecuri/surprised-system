@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import httpx
 import psutil
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -394,24 +394,45 @@ app.add_middleware(CORSMiddleware, allow_origins=os.getenv("CORS_ORIGINS", "*").
                    expose_headers=["X-Centinela-Nodo"])
 
 
+LIMITE_GLOBAL = int(os.getenv("LIMITE_GLOBAL", "150"))   # peticiones/min por IP a este nodo
+
+
 @app.middleware("http")
-async def marcar_nodo(request: Request, call_next):
+async def guardia(request: Request, call_next):
+    # Escudo por IP en el propio nodo: si el gateway cae o atacan por el Funnel directo,
+    # ninguna IP puede inundar la API. /health y /ping quedan libres (los usa el clúster).
+    if request.url.path not in ("/health", "/ping", "/"):
+        if _exceso("global", ip_cliente(request), LIMITE_GLOBAL, 60):
+            r = Response('{"error":"Demasiadas peticiones"}', status_code=429,
+                         media_type="application/json")
+            r.headers["Retry-After"] = "60"
+            r.headers["X-Centinela-Nodo"] = NODO
+            return r
     resp = await call_next(request)
     resp.headers["X-Centinela-Nodo"] = NODO
     return resp
 
 
-_limite = defaultdict(deque)
+# Rate limiting por IP, defensa en profundidad (el gateway ya filtra antes).
+# Un balde por "cubeta" (global, reportes, chat) para que no se pisen entre sí.
+_baldes: dict[str, defaultdict] = {}
 
 
-def limitar(ip: str, maximo=10, ventana=600):
+def _exceso(cubeta: str, ip: str, maximo: int, ventana: int) -> bool:
+    cola = _baldes.setdefault(cubeta, defaultdict(deque))[ip]
     ahora = time.time()
-    cola = _limite[ip]
     while cola and ahora - cola[0] > ventana:
         cola.popleft()
     if len(cola) >= maximo:
-        raise HTTPException(429, "Demasiados reportes, intenta en unos minutos")
+        return True
     cola.append(ahora)
+    return False
+
+
+def limitar(ip: str, maximo=10, ventana=600):
+    """Límite de reportes por IP (escrituras)."""
+    if _exceso("reportes", ip, maximo, ventana):
+        raise HTTPException(429, "Demasiados reportes, intenta en unos minutos")
 
 
 class Reporte(BaseModel):
