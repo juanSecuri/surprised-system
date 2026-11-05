@@ -7,21 +7,21 @@ Si Supabase no responde, el nodo entra en MODO DEGRADADO: guarda los reportes en
 SQLite local (bandeja de salida) y responde consultas desde su caché local; cuando
 Supabase vuelve, sincroniza solo.
 """
-import os, re, math, json, time, socket, sqlite3, hashlib, asyncio, logging, subprocess
+import os, re, math, json, time, socket, sqlite3, hashlib, hmac, base64, struct, secrets, asyncio, logging, subprocess
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import httpx
 import psutil
-from fastapi import FastAPI, HTTPException, Request, Response, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, Response, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 NODO = os.getenv("NODO_NOMBRE", "JE")
 ROL = os.getenv("NODO_ROL", "principal")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -276,8 +276,17 @@ def ollama_disponible(forzar=False) -> bool:
     return ok
 
 
-def ollama_chat(system: str, usuario: str, json_mode=False, timeout=90) -> str:
-    cuerpo = {"model": OLLAMA_MODEL, "stream": False, "options": {"temperature": 0.2},
+def ollama_chat(system: str, usuario: str, json_mode=False, timeout=90,
+                temperatura=0.2, num_predict=220) -> str:
+    # Límites para que la IA no consuma de más: contexto chico, respuesta corta,
+    # y keep_alive para que el modelo se descargue solo cuando nadie lo usa.
+    opciones = {
+        "temperature": temperatura,
+        "num_predict": num_predict,
+        "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "1024")),
+    }
+    cuerpo = {"model": OLLAMA_MODEL, "stream": False, "options": opciones,
+              "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
               "messages": [{"role": "system", "content": system},
                            {"role": "user", "content": usuario}]}
     if json_mode:
@@ -302,7 +311,8 @@ def clasificar_con_ia(reporte_id: int, numero: str, descripcion: str):
                   "- wangiri: timbran una vez desde el extranjero para que devuelvas la llamada\n"
                   "- otro: nada de lo anterior\n"
                   'Responde SOLO JSON: {"categoria": "...", "resumen": "frase corta en español, sin punto final"}')
-        res = json.loads(ollama_chat(system, f"Número: {numero}\nReporte: {descripcion}", json_mode=True))
+        res = json.loads(ollama_chat(system, f"Número: {numero}\nReporte: {descripcion}",
+                                     json_mode=True, temperatura=0, num_predict=140, timeout=45))
         cat = res.get("categoria", "otro").lower().strip()
         cat = cat if cat in CATEGORIAS else "otro"
         with pool.connection(timeout=4) as conn:
@@ -472,6 +482,38 @@ def consultar(numero: str):
     return ficha(normalizar(numero))
 
 
+# Detección de campañas activas: muchas personas distintas reportando el mismo número en poco tiempo
+CAMPANA_REPORTEROS = int(os.getenv("CAMPANA_REPORTEROS", "3"))
+CAMPANA_VENTANA_MIN = int(os.getenv("CAMPANA_VENTANA_MIN", "15"))
+
+
+def detectar_campana(numero: str):
+    """Si varias personas DISTINTAS reportan el mismo número en pocos minutos, es una
+    campaña en curso: deja un evento en la bitácora y avisa por Telegram (una vez por hora)."""
+    try:
+        with pool.connection(timeout=4) as conn:
+            r = conn.execute("""select count(distinct coalesce(reportero, id::text)) unicos
+                                 from reportes
+                                 where numero=%s and creado > now() - (%s || ' minutes')::interval""",
+                             (numero, CAMPANA_VENTANA_MIN)).fetchone()
+            unicos = r["unicos"] if r else 0
+            if unicos < CAMPANA_REPORTEROS:
+                return
+            ya = conn.execute("""select 1 from eventos where tipo='campana' and detalle like %s
+                                 and creado > now() - interval '60 minutes' limit 1""",
+                             ("%" + numero + "%",)).fetchone()
+            if ya:
+                return
+            conn.execute("insert into eventos (nodo, tipo, detalle) values (%s,'campana',%s)",
+                         (NODO, f"Campaña activa: {numero} · {unicos} personas en {CAMPANA_VENTANA_MIN} min"))
+        f = ficha(numero)
+        telegram_enviar(f"🚨 CAMPAÑA ACTIVA\n{numero} — {unicos} reportes de personas distintas "
+                        f"en {CAMPANA_VENTANA_MIN} min.\nRiesgo {f.get('score')}/100 ({f.get('nivel')}). "
+                        f"Bloquéalo y avisa a tus contactos.")
+    except Exception as e:
+        log.warning("Detección de campaña falló: %s", e)
+
+
 def registrar_reporte(numero_raw: str, categoria: str | None, descripcion: str | None, canal: str,
                       reportero: str, bg: BackgroundTasks) -> dict:
     """Núcleo compartido por la web, Telegram y el celular."""
@@ -487,6 +529,7 @@ def registrar_reporte(numero_raw: str, categoria: str | None, descripcion: str |
         rid = guardar_reporte(p)
         if p["descripcion"] and not cat:
             bg.add_task(clasificar_con_ia, rid, numero, p["descripcion"])
+        bg.add_task(detectar_campana, numero)
         return {"ok": True, "modo": "normal", "id": rid, "nodo": NODO, "numero": ficha(numero)}
     except Exception as e:
         log.warning("Guardando reporte en bandeja local: %s", e)
@@ -583,11 +626,16 @@ def chat(c: Chat):
             contexto = json.dumps({"numeros_consultados": fichas, "estadisticas": st},
                                   default=str, ensure_ascii=False)
             system = ("Eres Centinela, asistente de un sistema comunitario anti-spam telefónico en Colombia. "
-                      "Responde en español, cálido y breve (máximo 5 líneas). Usa SOLO los datos del CONTEXTO "
+                      "Tu ÚNICO tema son las llamadas, el spam, las estafas telefónicas y este sistema. "
+                      "Responde en español, cálido y breve (máximo 4 líneas). Usa SOLO los datos del CONTEXTO "
                       "para hablar de números; nunca inventes reportes ni cifras. Si el riesgo es alto, "
-                      "aconseja no contestar y bloquear. Si preguntan algo general sobre estafas telefónicas, "
-                      "da consejos prácticos. Nunca pidas datos personales.")
-            txt = ollama_chat(system, f"CONTEXTO: {contexto}\n\nUSUARIO: {c.mensaje}")
+                      "aconseja no contestar y bloquear. "
+                      "Si te preguntan cualquier cosa que NO tenga que ver con llamadas o estafas telefónicas "
+                      "(matemáticas, código, chistes, otros temas), responde exactamente: "
+                      "'Solo puedo ayudarte con Centinela y la identificación de llamadas.' "
+                      "Nunca pidas datos personales.")
+            txt = ollama_chat(system, f"CONTEXTO: {contexto}\n\nUSUARIO: {c.mensaje}",
+                              temperatura=0.3, num_predict=200)
             return {"respuesta": txt, "fuente": "ollama", "modelo": OLLAMA_MODEL, "nodo": NODO, "numeros": fichas}
         except Exception as e:
             log.warning("Ollama falló, respondo con reglas: %s", e)
@@ -782,3 +830,166 @@ def resumen_diario():
     return {"respuesta": (f"☀️ Buenos días. Así va Centinela:\n• {st['reportes_24h']} reportes en las últimas 24 h\n"
                           f"• {st['numeros']} números vigilados, {st['alto_riesgo']} de riesgo alto\n\n"
                           f"🔝 Más peligrosos:\n{tope or 'Sin datos'}\n\n💡 {consejo}")}
+
+
+# ================================================================ Panel de administración (login)
+# Proceso de autenticación: usuario + contraseña cifrada (PBKDF2), sesión firmada (HMAC),
+# bloqueo tras varios intentos y doble factor opcional (TOTP, compatible con Aegis).
+# Solo se activa cuando hay ADMIN_USER y ADMIN_HASH configurados (configurar_admin.sh).
+ADMIN_USER = os.getenv("ADMIN_USER", "")
+ADMIN_HASH = os.getenv("ADMIN_HASH", "")              # pbkdf2$<salt>$<hash>
+ADMIN_TOTP = os.getenv("ADMIN_TOTP", "")              # secreto base32 (2FA, opcional)
+SECRET_KEY = os.getenv("SECRET_KEY", "") or SAL       # firma de la cookie de sesión
+ADMIN_ACTIVO = bool(ADMIN_USER and ADMIN_HASH)
+SESION_MIN = 30
+INTENTOS_MAX = 5
+BLOQUEO_MIN = 15
+_login_fallos: dict[str, list] = defaultdict(list)
+
+
+def clave_ok(clave: str, guardado: str) -> bool:
+    try:
+        _, salt_hex, hash_hex = guardado.split("$")
+        h = hashlib.pbkdf2_hmac("sha256", clave.encode(), bytes.fromhex(salt_hex), 200_000)
+        return hmac.compare_digest(h.hex(), hash_hex)
+    except Exception:
+        return False
+
+
+def totp_ok(secreto: str, codigo: str) -> bool:
+    if not secreto:
+        return True
+    try:
+        clave = base64.b32decode(secreto.upper() + "=" * (-len(secreto) % 8))
+        codigo = (codigo or "").strip().replace(" ", "")
+        ahora = int(time.time())
+        for d in (-1, 0, 1):
+            msg = struct.pack(">Q", ahora // 30 + d)
+            h = hmac.new(clave, msg, hashlib.sha1).digest()
+            o = h[-1] & 15
+            val = "%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1_000_000)
+            if hmac.compare_digest(val, codigo):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def firmar_sesion(usuario: str) -> str:
+    cuerpo = base64.urlsafe_b64encode(json.dumps(
+        {"u": usuario, "exp": int(time.time()) + SESION_MIN * 60}).encode()).decode()
+    firma = hmac.new(SECRET_KEY.encode(), cuerpo.encode(), hashlib.sha256).hexdigest()
+    return f"{cuerpo}.{firma}"
+
+
+def sesion_valida(cookie: str | None) -> bool:
+    if not cookie or "." not in cookie:
+        return False
+    cuerpo, firma = cookie.rsplit(".", 1)
+    esperado = hmac.new(SECRET_KEY.encode(), cuerpo.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(firma, esperado):
+        return False
+    try:
+        return json.loads(base64.urlsafe_b64decode(cuerpo)).get("exp", 0) > time.time()
+    except Exception:
+        return False
+
+
+def login_bloqueado(ip: str) -> bool:
+    ahora = time.time()
+    _login_fallos[ip] = [t for t in _login_fallos[ip] if ahora - t < BLOQUEO_MIN * 60]
+    return len(_login_fallos[ip]) >= INTENTOS_MAX
+
+
+PAGINA = """<!doctype html><html lang=es><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width, initial-scale=1"><title>Centinela · Panel</title>
+<style>body{{font-family:system-ui,sans-serif;background:#0e1424;color:#e7ebf4;margin:0;padding:24px}}
+.card{{max-width:420px;margin:7vh auto;background:#161e33;border:1px solid #283252;border-radius:16px;padding:28px}}
+h1{{font-size:20px;margin:0 0 4px}} .sub{{color:#9ba5bd;margin:0 0 18px;font-size:14px}}
+label{{display:block;font-size:13px;color:#9ba5bd;margin:12px 0 4px}}
+input{{width:100%;box-sizing:border-box;padding:11px;border-radius:8px;border:1px solid #283252;background:#0e1424;color:#e7ebf4;font-size:15px}}
+button{{width:100%;margin-top:18px;padding:12px;border:0;border-radius:8px;background:#2346d8;color:#fff;font-size:15px;font-weight:600;cursor:pointer}}
+.err{{background:#3a0f16;color:#ff8a98;border:1px solid #cc2539;border-radius:8px;padding:10px;font-size:14px;margin-bottom:12px}}
+table{{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px}}
+th,td{{padding:8px;border-bottom:1px solid #283252;text-align:left}} th{{color:#9ba5bd}}
+a{{color:#7a93ff}} .top{{max-width:1000px;margin:0 auto}}</style></head><body>{cuerpo}</body></html>"""
+
+LOGIN_HTML = """<div class=card><h1>🛡️ Centinela · Panel</h1>
+<p class=sub>Acceso solo para el equipo</p>{error}
+<form method=post action="/admin/login">
+<label>Usuario</label><input name=usuario autocomplete=username required>
+<label>Contraseña</label><input name=clave type=password autocomplete=current-password required>
+{totp}<button>Entrar</button></form></div>"""
+
+
+def _campo_totp() -> str:
+    return ("<label>Código (Aegis)</label><input name=codigo inputmode=numeric "
+            "autocomplete=one-time-code>") if ADMIN_TOTP else ""
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_panel(request: Request):
+    if not ADMIN_ACTIVO:
+        return HTMLResponse(PAGINA.format(cuerpo="<div class=card><h1>Panel no configurado</h1>"
+            "<p class=sub>Corre <code>configurar_admin.sh</code> en el servidor.</p></div>"))
+    if not sesion_valida(request.cookies.get("centinela_admin")):
+        return RedirectResponse("/admin/login", status_code=303)
+    try:
+        filas = q("""select numero, pais, score, nivel, total_reportes, categoria_principal
+                     from numeros order by score desc, ultimo_reporte desc limit 100""", todos=True)
+        st = stats()
+        cab = (f"<div class=top><h1>Panel de Centinela</h1><p class=sub>"
+               f"{st['numeros']} números · {st['reportes']} reportes · {st['alto_riesgo']} de riesgo alto · "
+               f"atendido por {NODO} · <a href='/admin/salir'>Salir</a></p>")
+        cuerpo = "".join(
+            f"<tr><td>{formato(f['numero'])}</td><td>{f['pais'] or ''}</td><td>{f['score']}</td>"
+            f"<td>{f['nivel']}</td><td>{f['total_reportes']}</td>"
+            f"<td>{CAT_TXT.get(f['categoria_principal'], '—')}</td></tr>" for f in filas)
+        tabla = ("<table><tr><th>Número</th><th>País</th><th>Riesgo</th><th>Nivel</th>"
+                 "<th>Reportes</th><th>Tipo</th></tr>" + cuerpo + "</table></div>")
+        return HTMLResponse(PAGINA.format(cuerpo=cab + tabla))
+    except Exception as e:
+        log.warning("Panel: %s", e)
+        return HTMLResponse(PAGINA.format(cuerpo="<div class=card><h1>Sin conexión a la base</h1>"
+            "<p class=sub><a href='/admin/salir'>Salir</a></p></div>"))
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login_form(request: Request):
+    if not ADMIN_ACTIVO:
+        return RedirectResponse("/admin", status_code=303)
+    if sesion_valida(request.cookies.get("centinela_admin")):
+        return RedirectResponse("/admin", status_code=303)
+    return HTMLResponse(PAGINA.format(cuerpo=LOGIN_HTML.format(error="", totp=_campo_totp())))
+
+
+@app.post("/admin/login", response_class=HTMLResponse)
+def admin_login(request: Request, usuario: str = Form(""), clave: str = Form(""), codigo: str = Form("")):
+    if not ADMIN_ACTIVO:
+        return RedirectResponse("/admin", status_code=303)
+    ip = ip_cliente(request)
+
+    def error(msg, code=401):
+        return HTMLResponse(PAGINA.format(cuerpo=LOGIN_HTML.format(
+            error=f"<div class=err>{msg}</div>", totp=_campo_totp())), status_code=code)
+
+    if login_bloqueado(ip):
+        return error(f"Demasiados intentos. Espera {BLOQUEO_MIN} minutos.", 429)
+    ok = (hmac.compare_digest(usuario, ADMIN_USER) and clave_ok(clave, ADMIN_HASH)
+          and totp_ok(ADMIN_TOTP, codigo))
+    if not ok:
+        _login_fallos[ip].append(time.time())
+        evento("login_fallido", f"intento de acceso al panel desde {ip[:12]}")
+        return error("Datos incorrectos.")
+    _login_fallos[ip].clear()
+    resp = RedirectResponse("/admin", status_code=303)
+    resp.set_cookie("centinela_admin", firmar_sesion(usuario), max_age=SESION_MIN * 60,
+                    httponly=True, samesite="strict", secure=True)
+    return resp
+
+
+@app.get("/admin/salir")
+def admin_salir():
+    resp = RedirectResponse("/admin/login", status_code=303)
+    resp.delete_cookie("centinela_admin")
+    return resp

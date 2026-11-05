@@ -39,7 +39,9 @@ export default {
     if (req.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
 
     const ip = req.headers.get("CF-Connecting-IP") || "0.0.0.0";
-    const esApi = url.pathname.startsWith("/api/") || url.pathname === "/health";
+    // Rutas que atienden los nodos (JE/JP): API, salud y el panel de administración.
+    const esApi = url.pathname.startsWith("/api/") || url.pathname === "/health"
+      || url.pathname.startsWith("/admin");
 
     if (esApi) {
       const esChat = url.pathname.startsWith("/api/chat");

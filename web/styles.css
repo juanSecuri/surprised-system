@@ -333,3 +333,44 @@ h3 { font-size: 18px; font-weight: 700; }
   .pantalla { min-height: 540px; }
   .chat-abrir span { display: none; }
 }
+
+/* ---------- Sala de control 3D ---------- */
+.sala-lienzo {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background: radial-gradient(130% 90% at 50% 0%, #152046, #0a0f1f);
+  border: 1px solid var(--linea);
+  box-shadow: inset 0 0 120px rgba(35,70,216,.18);
+}
+#sala3d {
+  display: block;
+  width: 100%;
+  height: clamp(340px, 56vw, 560px);
+  touch-action: none;
+  cursor: grab;
+}
+#sala3d:active { cursor: grabbing; }
+.sala-chip {
+  position: absolute; top: 14px; left: 14px;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 13px; border-radius: 999px;
+  background: rgba(10,16,32,.72); backdrop-filter: blur(6px);
+  color: #e7ebf4; font-size: 13px; font-weight: 700;
+  border: 1px solid rgba(142,162,255,.3);
+}
+.sala-chip::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--gris);
+}
+.sala-chip[data-e="ok"]::before { background: var(--verde); box-shadow: 0 0 10px var(--verde); }
+.sala-chip[data-e="failover"]::before { background: var(--ambar); box-shadow: 0 0 10px var(--ambar); }
+.sala-chip[data-e="caido"]::before { background: var(--rojo); box-shadow: 0 0 10px var(--rojo); }
+.sala-leyenda {
+  position: absolute; bottom: 12px; left: 14px; right: 14px;
+  display: flex; flex-wrap: wrap; gap: 8px 16px;
+  list-style: none; margin: 0; padding: 0;
+  font-size: 12px; color: #c4ccdf;
+}
+.sala-leyenda li { display: inline-flex; align-items: center; gap: 6px; }
+.sala-leyenda i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+@media (max-width: 560px) { .sala-leyenda { display: none; } }

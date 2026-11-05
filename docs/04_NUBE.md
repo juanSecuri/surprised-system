@@ -10,6 +10,18 @@
 
 > Plan gratis: 500 MB y el proyecto se pausa tras 7 días sin actividad. Los latidos de los servidores lo mantienen activo.
 
+### ¿Ya tienes 2 proyectos gratis en Supabase? (límite de la cuenta)
+- **Opción A (recomendada): que JP cree el proyecto en SU cuenta** de Supabase e invite a Juan como *Developer* (Organization → Team → Invite). Cada persona tiene su propio cupo de 2 proyectos. No cambia nada más.
+- **Opción B: pausar** uno de tus proyectos que no uses (los pausados no cuentan). No lo hagas con proyectos de trabajo.
+- **Opción C: Neon** (Postgres gratis, hasta 100 proyectos) — ver abajo.
+
+### Alternativa: Neon
+1. <https://neon.com> → Sign up con GitHub → proyecto `centinela`, región **AWS US East (N. Virginia)**, Postgres 17.
+2. **SQL Editor** → pegar `db/schema.sql` → Run.
+3. **Connect** → copiar la cadena (`postgresql://...neon.tech/neondb?sslmode=require`). Ese es el `DATABASE_URL`.
+
+La API detecta Neon sola y se adapta: Neon gratis da 100 horas de cómputo al mes y apaga la BD tras 5 min sin uso, así que con Neon los latidos van cada 15 min (no cada 20 s) y no se dejan conexiones abiertas. El estado "en vivo" de JE/JP lo da el Gateway (`/gateway/estado`), que no usa la base de datos. La primera consulta tras un rato sin uso tarda ~1 s más mientras Neon despierta.
+
 ## 2 · GitHub (para llevar el código a JE y JP)
 En el PC personal:
 ```bash

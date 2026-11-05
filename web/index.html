@@ -22,6 +22,7 @@
   <nav class="menu" aria-label="Secciones">
     <a href="#reportar">Reportar</a>
     <a href="#comunidad">Comunidad</a>
+    <a href="#sala">Sala 3D</a>
     <a href="#cluster">Clúster</a>
     <a href="#protegerte">Protégete</a>
   </nav>
@@ -143,6 +144,24 @@
     </div>
   </section>
 
+  <!-- SALA DE CONTROL 3D -->
+  <section class="seccion sala-sec" id="sala">
+    <div class="seccion-cab">
+      <h2>Sala de control en 3D</h2>
+      <p>El globo muestra cada reporte real entrando como un ataque hacia Colombia. Alrededor, el clúster vivo: Cloudflare reparte, JE o JP atiende, y la base de datos y la IA responden. Arrástralo con el mouse.</p>
+    </div>
+    <div class="sala-lienzo">
+      <canvas id="sala3d" aria-label="Visualización 3D del clúster y las amenazas en vivo"></canvas>
+      <span class="sala-chip" id="sala-estado" data-e="cargando">Conectando…</span>
+      <ul class="sala-leyenda" aria-hidden="true">
+        <li><i style="background:var(--verde)"></i>Atendiendo / OK</li>
+        <li><i style="background:var(--ambar)"></i>En espera</li>
+        <li><i style="background:var(--rojo)"></i>Caído / riesgo alto</li>
+        <li><i style="background:var(--cobalto)"></i>Tráfico activo</li>
+      </ul>
+    </div>
+  </section>
+
   <!-- CLÚSTER -->
   <section class="seccion cluster-sec" id="cluster">
     <div class="seccion-cab">
@@ -242,6 +261,7 @@
   </form>
 </section>
 
+<script type="module" src="sala3d.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

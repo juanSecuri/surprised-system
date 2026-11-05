@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="24dp">
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Centinela · Llamadas" android:textSize="22sp" android:textStyle="bold"
+            android:paddingBottom="4dp"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Detecta cada llamada entrante y te dice si es spam."
+            android:paddingBottom="20dp"/>
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Servidor (gateway)"/>
+        <EditText android:id="@+id/url" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="textUri" android:hint="https://centinela....workers.dev"/>
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Token de llamadas" android:paddingTop="12dp"/>
+        <EditText android:id="@+id/token" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="textPassword" android:hint="LLAMADAS_TOKEN"/>
+
+        <Button android:id="@+id/guardar" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Guardar" android:layout_marginTop="16dp"/>
+        <Button android:id="@+id/permisos" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Dar permisos"/>
+        <Button android:id="@+id/probar" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Probar envío"/>
+
+        <TextView android:id="@+id/estado" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="16dp" android:text=""/>
+    </LinearLayout>
+</ScrollView>
