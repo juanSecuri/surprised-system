@@ -168,6 +168,21 @@ ufw allow from 192.168.0.0/16 to any port 22 proto tcp
 ufw allow from 10.0.0.0/8 to any port 22 proto tcp
 ufw --force enable
 
+# fail2ban: bloquea la IP que falle varias veces la clave de SSH
+DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban >/dev/null 2>&1 || true
+cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 4
+backend = systemd
+ignoreip = 127.0.0.1/8 100.64.0.0/10 192.168.0.0/16 10.0.0.0/8
+
+[sshd]
+enabled = true
+EOF
+systemctl enable --now fail2ban 2>/dev/null || true
+
 # ---------------------------------------------------------------------
 azul "8/8 Publicando la API en internet con Tailscale Funnel (HTTPS gratis)"
 amarillo "   Si aparece un link para habilitar Funnel, ábrelo, deja las casillas marcadas y dale Enable."

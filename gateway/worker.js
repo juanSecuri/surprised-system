@@ -53,7 +53,7 @@ export default {
 
     if (url.pathname === "/gateway/estado") return cors(json(await estado(env)));
     if (esApi) return cors(await proxy(req, env, url));
-    if (env.ASSETS) return env.ASSETS.fetch(req);
+    if (env.ASSETS) return cors(await env.ASSETS.fetch(req));   // la web, con cabeceras de seguridad
     return cors(json({ servicio: "Centinela gateway", rutas: ["/api/*", "/health", "/gateway/estado"] }));
   },
 };
@@ -145,9 +145,19 @@ function json(data, status = 200, extra = {}) {
 
 function cors(resp) {
   const r = new Response(resp.body, resp);
+  // CORS
   r.headers.set("Access-Control-Allow-Origin", "*");
   r.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   r.headers.set("Access-Control-Allow-Headers", "content-type");
   r.headers.set("Access-Control-Expose-Headers", "X-Centinela-Nodo, X-Centinela-Failover");
+  // Cabeceras de seguridad (protegen al navegador del usuario)
+  r.headers.set("X-Content-Type-Options", "nosniff");          // no "adivinar" tipos de archivo
+  r.headers.set("X-Frame-Options", "DENY");                     // nadie puede meter la web en un iframe
+  r.headers.set("Referrer-Policy", "no-referrer");             // no filtra a dónde vas
+  r.headers.set("Strict-Transport-Security", "max-age=31536000"); // obliga HTTPS
+  r.headers.set("Content-Security-Policy",                      // solo carga recursos de confianza
+    "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self'; " +
+    "connect-src 'self'; frame-ancestors 'none'");
   return r;
 }
