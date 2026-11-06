@@ -363,12 +363,15 @@ async function vigilarLlamadas() {
   } catch { /* opcional: si falla, la web sigue normal */ }
 }
 
-/* ---------- arranque ---------- */
+/* ---------- arranque (optimizado: menos llamadas repetidas, pausa en segundo plano) ---------- */
 cargarCluster(); cargarComunidad(); cargarEventos();
-setInterval(cargarCluster, 5000);
-setInterval(cargarComunidad, 30000);
-setInterval(cargarEventos, 15000);
-vigilarLlamadas(); setInterval(vigilarLlamadas, 4000);
+vigilarLlamadas();
+// Polling único compartido: cluster 10s, eventos 30s, comunidad 45s, llamadas 8s
+setInterval(() => { if (document.hidden) return; cargarCluster(); }, 10000);
+setInterval(() => { if (document.hidden) return; cargarEventos(); }, 30000);
+setInterval(() => { if (document.hidden) return; cargarComunidad(); }, 45000);
+setInterval(() => { if (document.hidden) return; vigilarLlamadas(); }, 8000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { cargarCluster(); vigilarLlamadas(); } });
 
 /* ---------- extras: exportar, compartir, tema ---------- */
 function descargar(nombre, texto, tipo) {

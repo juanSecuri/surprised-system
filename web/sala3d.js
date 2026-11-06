@@ -1,6 +1,7 @@
 /* CENTINELA · Sala de control 3D (Three.js, vendorizado para respetar el CSP estricto)
    Globo de amenazas con ciudades reales de Colombia (por indicativo) + clúster vivo,
-   sonido en cada amenaza, teléfono 3D que timbra con llamadas reales y modo pantalla completa.
+   sonido en cada amenaza y modo pantalla completa.
+   Las llamadas reales se pintan SOLO en el teléfono del hero (app.js); abrir otro duplicaba la animación y saturaba la web.
    Lee los mismos endpoints que app.js. Si no hay WebGL, se oculta solo. */
 "use strict";
 import * as THREE from "./vendor/three.module.js";
@@ -89,11 +90,6 @@ function arrancar() {
     if (!sonidoOn || !audioCtx) return;
     tono(nivel === "alto" ? 880 : nivel === "medio" ? 660 : 520, audioCtx.currentTime, 0.22);
   }
-  function timbrar() {
-    if (!sonidoOn || !audioCtx) return;
-    const t0 = audioCtx.currentTime;
-    for (let i = 0; i < 3; i++) { tono(480, t0 + i * 0.8, 0.32, 0.12, "triangle"); tono(620, t0 + i * 0.8 + 0.18, 0.32, 0.12, "triangle"); }
-  }
 
   // ---------- NODOS DEL CLÚSTER ----------
   const frente = new THREE.Group(); scene.add(frente);
@@ -135,36 +131,6 @@ function arrancar() {
   function paquete(a, b, color) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color }));
     frente.add(m); paquetes.push({ a: P[a], b: P[b], m, t: Math.random(), vel: 0.6 + Math.random() * 0.5 });
-  }
-
-  // ---------- TELÉFONO 3D (timbra con llamadas reales) ----------
-  const telCv = document.createElement("canvas"); telCv.width = 300; telCv.height = 500;
-  const telG = telCv.getContext("2d");
-  const telTex = new THREE.CanvasTexture(telCv); telTex.colorSpace = THREE.SRGBColorSpace;
-  const tele = new THREE.Group(); tele.position.set(0, 0.1, 4.6); tele.visible = false; scene.add(tele);
-  tele.add(new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.05, 0.14),
-    new THREE.MeshStandardMaterial({ color: 0x0b1020, metalness: 0.6, roughness: 0.3 })));
-  const telPant = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.9), new THREE.MeshBasicMaterial({ map: telTex }));
-  telPant.position.z = 0.08; tele.add(telPant);
-  let telHasta = 0;
-  function dibujarTel(num, nivel, texto) {
-    const g = telG;
-    g.fillStyle = nivel === "alto" ? "#2a0b12" : nivel === "medio" ? "#2a1e0b" : "#0b2018";
-    g.fillRect(0, 0, 300, 500);
-    g.textAlign = "center"; g.fillStyle = "#cdd6ea";
-    g.font = "bold 24px Archivo, sans-serif"; g.fillText("LLAMADA ENTRANTE", 150, 64);
-    g.fillStyle = "#fff"; g.font = "bold 30px Archivo, sans-serif"; g.fillText(num || "Desconocido", 150, 130);
-    const col = nivel === "alto" ? "#ff5c70" : nivel === "medio" ? "#f0b13d" : "#3cc488";
-    g.fillStyle = col; g.beginPath(); g.arc(150, 250, 64, 0, 7); g.fill();
-    g.fillStyle = "#0b1020"; g.font = "bold 34px Archivo, sans-serif";
-    g.fillText(nivel === "alto" ? "SPAM" : nivel === "medio" ? "DUDA" : "OK", 150, 262);
-    g.fillStyle = "#e7ebf4"; g.font = "18px Archivo, sans-serif";
-    (texto || "").split("\n").slice(0, 3).forEach((l, i) => g.fillText(l.slice(0, 32), 150, 360 + i * 28));
-    telTex.needsUpdate = true;
-  }
-  function mostrarLlamada(num, nivel, texto) {
-    dibujarTel(num, nivel, texto); tele.visible = true; telHasta = performance.now() + 9000;
-    timbrar(); ping(nivel);
   }
 
   // ---------- ARCOS DE AMENAZA ----------
@@ -248,83 +214,8 @@ function arrancar() {
       if (vistos.size > 200) vistos.clear();
     } catch {}
   }
-  // ---------- llamadas reales (teléfono 3D) ----------
-  let ultLlamada = null;
-  async function llamadas() {
-    try {
-      const d = await (await fetch(API + "/api/llamadas?limite=1")).json();
-      const l = d && d[0]; if (!l) return;
-      if (ultLlamada === null) { ultLlamada = l.id; return; }
-      if (l.id === ultLlamada || (l.segundos != null && l.segundos > 120)) return;
-      ultLlamada = l.id;
-      const txt = (l.categoria_principal ? l.categoria_principal : "") + (l.total_reportes ? `\n${l.total_reportes} reportes` : "");
-      mostrarLlamada(l.numero || "Oculto", l.nivel || "bajo", txt);
-    } catch {}
-  }
-
-  // ---------- cámara + controles ----------
-  let objT = 0.35, theta = 0.35, phi = 0.12, objP = 0.12, arrastrando = false, px = 0, py = 0;
-  const foco = new THREE.Vector3(0, 0.1, 1.2);
-  lienzo.addEventListener("pointerdown", (e) => { armarAudio(); arrastrando = true; px = e.clientX; py = e.clientY; lienzo.setPointerCapture(e.pointerId); });
-  lienzo.addEventListener("pointerup", (e) => { arrastrando = false; try { lienzo.releasePointerCapture(e.pointerId); } catch {} });
-  lienzo.addEventListener("pointermove", (e) => {
-    if (!arrastrando) return;
-    objT += (e.clientX - px) * 0.005; objP += (e.clientY - py) * 0.005; px = e.clientX; py = e.clientY;
-    objT = Math.max(-0.9, Math.min(0.9, objT)); objP = Math.max(-0.35, Math.min(0.6, objP));
-  });
-  function medir() {
-    const w = lienzo.clientWidth, h = lienzo.clientHeight || Math.round(w * 0.62);
-    renderer.setSize(w, h, false); camara.aspect = w / h; camara.updateProjectionMatrix();
-  }
-  new ResizeObserver(medir).observe(lienzo); medir();
-
-  // botones: sonido + pantalla completa
-  const btnSon = document.getElementById("sala-sonido");
-  if (btnSon) btnSon.addEventListener("click", () => { armarAudio(); sonidoOn = !sonidoOn; btnSon.textContent = sonidoOn ? "🔊" : "🔇"; btnSon.setAttribute("aria-pressed", String(sonidoOn)); if (sonidoOn) ping("medio"); });
-  const btnFull = document.getElementById("sala-full");
-  const caja = document.querySelector(".sala-lienzo");
-  if (btnFull && caja) btnFull.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else caja.requestFullscreen && caja.requestFullscreen(); });
-  document.addEventListener("fullscreenchange", () => setTimeout(medir, 60));
-
-  // ---------- bucle ----------
-  const reloj = new THREE.Clock();
-  function animar() {
-    const dt = Math.min(0.05, reloj.getDelta());
-    if (!reduce) globo.rotation.y += dt * 0.05;
-    theta += (objT - theta) * 0.08; phi += (objP - phi) * 0.08;
-    const rad = 8.6;
-    camara.position.set(Math.sin(theta) * rad, 1.1 + phi * 3, Math.cos(theta) * rad);
-    camara.lookAt(foco);
-
-    Object.values(N).forEach((n) => { if (!reduce) n.anillo.rotation.z += dt * 0.6; });
-    paquetes.forEach((p) => { p.t += dt * p.vel; if (p.t > 1) p.t -= 1; p.m.position.lerpVectors(p.a, p.b, p.t); });
-
-    for (let i = arcos.length - 1; i >= 0; i--) {
-      const a = arcos[i];
-      if (a.fase === "viaja") {
-        a.t += dt * 0.5; a.punta.position.copy(a.curva.getPointAt(Math.min(1, a.t)));
-        if (a.t >= 1) { a.fase = "apaga"; globo.remove(a.punta); }
-      } else { a.vida -= dt * 0.25; a.tubo.material.opacity = Math.max(0, a.vida * 0.85); if (a.vida <= 0) { globo.remove(a.tubo); arcos.splice(i, 1); } }
-    }
-
-    // teléfono timbrando
-    if (tele.visible) {
-      tele.rotation.z = Math.sin(reloj.elapsedTime * 22) * 0.06;
-      tele.position.y = 0.1 + Math.sin(reloj.elapsedTime * 3) * 0.05;
-      if (performance.now() > telHasta) { tele.visible = false; tele.rotation.z = 0; }
-    }
-
-    if (flash > 0) { flash = Math.max(0, flash - dt * 1.2); halo.material.opacity = 0.06 + flash * 0.35; halo.material.color.setHex(flash > 0.5 ? COL.rojo : COL.acento); }
-    else halo.material.color.setHex(COL.acento);
-
-    renderer.render(scene, camara);
-  }
-  renderer.setAnimationLoop(() => { if (!document.hidden) animar(); });
-
-  // ---------- arranque de datos ----------
-  estadoCluster(); amenazas(true); llamadas();
-  setInterval(estadoCluster, 5000);
-  setInterval(() => amenazas(false), 6000);
-  setInterval(llamadas, 4000);
+  estadoCluster(); amenazas(true);
+  setInterval(() => { if (!document.hidden) estadoCluster(); }, 10000);
+  setInterval(() => { if (!document.hidden) amenazas(false); }, 12000);
   if (!reduce) setTimeout(() => { lanzarArco("+57 604 000 0000", "alto"); lanzarArco("+57 602 000 0000", "medio"); }, 1200);
 }

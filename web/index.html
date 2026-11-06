@@ -238,32 +238,13 @@
   </section>
 
 
-  <!-- APP ANDROID -->
-  <section class="seccion" id="app">
-    <div class="seccion-cab">
-      <h2>App Android (detección automática)</h2>
-      <p>Instala la app en tu Android con SIM (ej. Samsung A50) y cuando entre una llamada real verás <b>Posible SPAM</b> antes del segundo timbre. Sin MacroDroid: código propio en Kotlin.</p>
-    </div>
-    <div class="comunidad">
-      <div class="bloque"><h3>Pasos</h3>
-        <ol style="margin:0;padding-left:22px">
-          <li>Descarga el APK (<a href="app.apk" download>app.apk</a>) en el celular.</li>
-          <li>Abre la app, guarda URL <code>https://centinela.juan-gallego-sec.workers.dev</code> + token (el mismo <code>LLAMADAS_TOKEN</code> del servidor), toca <b>Guardar</b>.</li>
-          <li>Toca <b>Dar permisos</b> y acepta Teléfono, Registro de llamadas y Notificaciones.</li>
-          <li>Toca <b>Probar envío</b> y debe decir <code>OK · +57..., medio (30/100)</code>.</li>
-          <li>Ajustes, Batería, Sin restricciones y <b>reinicia</b> el celular (Samsung lo necesita).</li>
-        </ol>
-        <p class="sub">Si Probar envío dice <code>HTTP 401</code>, el token no coincide; si dice <code>HTTP 503/530</code>, JE/JP están offline.</p>
-      </div>
-      <div class="bloque"><h3>Qué hace la app</h3>
-        <ul style="margin:0;padding-left:22px">
-          <li>Escucha la llamada entrante, avisa a <code>POST /api/llamada</code> y muestra notificación de alta prioridad.</li>
-          <li>Si el servidor está caído, dice <b>Centinela sin servidor</b> (no te engaña con sin reportes).</li>
-          <li>Privacidad: solo envía número + dispositivo (token). Los números sin reportes se enmascaran en la web.</li>
-        </ul>
-        <div class="export"><button class="btn-sec" id="share-reporte" type="button">Compartir reporte</button></div>
-      </div>
-    </div>
+  <!-- APP ANDROID (compacta: evita saturar) -->
+  <section class="seccion" id="app" style="padding-top:0">
+    <details style="background:var(--superficie);border:1px solid var(--linea);border-radius:14px;padding:14px 18px">
+      <summary style="cursor:pointer;font-weight:700;font-size:18px">📱 App Android — detección automática (descargar APK)</summary>
+      <p style="margin:12px 0 8px;color:var(--gris)">En el Android con SIM instala <a href="app.apk" download>app.apk</a>, guarda URL <code>https://centinela.juan-gallego-sec.workers.dev</code> + token (<code>LLAMADAS_TOKEN</code> de JE), <b>Guardar</b> → <b>Dar permisos</b> → <b>Probar envío</b> (debe decir <code>OK</code>) → Batería sin restricciones + reiniciar. Si dice <code>401</code> revisa token; si dice <code>503/530</code> JE/JP offline.</p>
+      <p style="margin:0;color:var(--gris);font-size:14px">Al entrar una llamada avisa a <code>POST /api/llamada</code> y muestra notificación de alta prioridad. Si el servidor cae dice <b>“sin servidor”</b>, no te engaña. Demo para el celular de tu mamá: abre Telegram en ese celular y escribe al bot <code>/estado</code>.</p>
+    </details>
   </section>
 
   <!-- PROTEGERTE -->
