@@ -1,0 +1,12 @@
+{
+  "name": "Centinela - Identificador de llamadas",
+  "short_name": "Centinela",
+  "description": "Consulta si un número es spam o estafa antes de contestar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E1424",
+  "theme_color": "#16203A",
+  "icons": [
+    {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z' fill='%232346D8'/%3E%3C/svg%3E", "sizes": "any", "type": "image/svg+xml"}
+  ]
+}

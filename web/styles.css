@@ -374,3 +374,38 @@ h3 { font-size: 18px; font-weight: 700; }
 .sala-leyenda li { display: inline-flex; align-items: center; gap: 6px; }
 .sala-leyenda i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
 @media (max-width: 560px) { .sala-leyenda { display: none; } }
+
+/* ---------- Sala 3D: controles, panel de ciudades, pantalla completa ---------- */
+.sala-ctrls { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; }
+.sala-ctrls button {
+  width: 40px; height: 40px; border-radius: 10px; cursor: pointer;
+  background: rgba(10,16,32,.72); backdrop-filter: blur(6px);
+  border: 1px solid rgba(142,162,255,.3); color: #e7ebf4; font-size: 18px;
+  display: grid; place-items: center; transition: background .15s;
+}
+.sala-ctrls button:hover { background: rgba(35,70,216,.5); }
+.sala-panel {
+  position: absolute; top: 58px; left: 14px;
+  background: rgba(10,16,32,.72); backdrop-filter: blur(6px);
+  border: 1px solid rgba(142,162,255,.25); border-radius: 12px;
+  padding: 10px 12px; min-width: 150px; color: #e7ebf4;
+}
+.sala-panel h4 { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #9fb0e0; text-transform: uppercase; letter-spacing: .04em; }
+.sala-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sala-panel li { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; }
+.sala-panel li b { color: #8ea2ff; }
+.sala-panel li.vacio { color: #8893ab; font-size: 12px; justify-content: flex-start; }
+/* En pantalla completa el lienzo ocupa todo y los controles crecen un poco */
+.sala-lienzo:fullscreen { width: 100vw; height: 100vh; border-radius: 0; border: 0; }
+.sala-lienzo:fullscreen #sala3d { height: 100vh; }
+.sala-lienzo:fullscreen .sala-panel { font-size: 15px; top: 70px; left: 24px; }
+@media (max-width: 560px) { .sala-panel { display: none; } }
+
+/* ---------- extras: exportar / tema / app ---------- */
+.tema-btn { cursor: pointer; background: var(--superficie); border: 1px solid var(--linea); border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 14px; color: var(--tinta); }
+.export { display: flex; gap: 8px; margin: 10px 0 14px; flex-wrap: wrap; }
+.btn-sec { cursor: pointer; background: var(--superficie); border: 1px solid var(--linea); border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 14px; color: var(--tinta); }
+.btn-sec:hover { border-color: var(--cobalto); color: var(--cobalto); }
+.sub { color: var(--gris); font-size: 14px; margin-top: 12px; }
+html[data-tema="oscuro"] { color-scheme: dark; --papel: #0E1424; --superficie: #161E33; --tinta: #E7EBF4; --gris: #9BA5BD; --linea: #283252; --cobalto: #7A93FF; --cobalto-suave: #1E2A52; }
+html[data-tema="claro"] { color-scheme: light; --papel: #EEF1F6; --superficie: #FFFFFF; --tinta: #16203A; --gris: #586178; --linea: #D5DBE7; --cobalto: #2346D8; --cobalto-suave: #E3E9FF; }

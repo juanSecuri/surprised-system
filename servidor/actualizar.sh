@@ -8,6 +8,8 @@ principal() {
   cd "$(dirname "${BASH_SOURCE[0]}")/.."
   sudo -u "${SUDO_USER:-$USER}" git pull --ff-only
   cp servidor/app/main.py servidor/app/requirements.txt /opt/centinela/
+  rm -rf /opt/centinela/centinela
+  cp -r servidor/app/centinela /opt/centinela/
   /opt/centinela/venv/bin/pip install -q -r /opt/centinela/requirements.txt
   chown -R centinela:centinela /opt/centinela
   systemctl restart centinela

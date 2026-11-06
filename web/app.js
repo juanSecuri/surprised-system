@@ -369,3 +369,46 @@ setInterval(cargarCluster, 5000);
 setInterval(cargarComunidad, 30000);
 setInterval(cargarEventos, 15000);
 vigilarLlamadas(); setInterval(vigilarLlamadas, 4000);
+
+/* ---------- extras: exportar, compartir, tema ---------- */
+function descargar(nombre, texto, tipo) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([texto], { type: tipo }));
+  a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function csvEscape(v) { v = String(v ?? ""); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+
+$("#export-csv")?.addEventListener("click", async () => {
+  try {
+    const { data } = await pedir("/api/top?limite=50");
+    const csv = ["numero,pais,score,nivel,total_reportes,categoria_principal,ultimo_reporte",
+      ...data.map((r) => [r.numero, r.pais, r.score, r.nivel, r.total_reportes, r.categoria_principal, r.ultimo_reporte].map(csvEscape).join(","))].join("\n");
+    descargar("centinela-top.csv", csv, "text/csv;charset=utf-8");
+  } catch { alert("No se pudo exportar. Revisa tu conexión."); }
+});
+$("#export-json")?.addEventListener("click", async () => {
+  try {
+    const [{ data: st }, { data: top }] = await Promise.all([pedir("/api/stats"), pedir("/api/top?limite=50")]);
+    descargar("centinela-datos.json", JSON.stringify({ stats: st, top, exportado: new Date().toISOString() }, null, 2), "application/json");
+  } catch { alert("No se pudo exportar. Revisa tu conexión."); }
+});
+$("#share-reporte")?.addEventListener("click", async () => {
+  const num = $("#r-numero")?.value || "un número";
+  const texto = "Centinela: ¿me contesta " + num + "? Revísalo antes de contestar:";
+  try {
+    if (navigator.share) await navigator.share({ title: "Centinela", text: texto, url: location.href });
+    else { await navigator.clipboard.writeText(texto + " " + location.href); alert("Texto copiado. Pégalo donde quieras compartirlo."); }
+  } catch {}
+});
+$("#tema-btn")?.addEventListener("click", () => {
+  const actual = document.documentElement.dataset.tema || "auto";
+  const next = actual === "oscuro" ? "claro" : "oscuro";
+  document.documentElement.dataset.tema = next;
+  try { localStorage.setItem("centinela-tema", next); } catch {}
+  $("#tema-btn").textContent = next === "oscuro" ? "Claro" : "Oscuro";
+  $("#tema-btn").setAttribute("aria-pressed", String(next === "oscuro"));
+});
+try {
+  const guardado = localStorage.getItem("centinela-tema");
+  if (guardado) { document.documentElement.dataset.tema = guardado; $("#tema-btn").textContent = guardado === "oscuro" ? "Claro" : "Oscuro"; }
+} catch {}

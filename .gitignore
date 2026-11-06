@@ -8,3 +8,11 @@ node_modules/
 .wrangler/
 .dev.vars
 *token*
+# Android (generado, no se commitea)
+android/**/build/
+android/**/.gradle/
+android/**/.idea/
+android/**/local.properties
+android/**/captures/
+# APK para descargar en web (se sube a Cloudflare, no a GitHub)
+web/app.apk

@@ -155,6 +155,7 @@ azul "5/8 Instalando la API Centinela en $APP_DIR"
 id centinela >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell "$NOLOGIN" centinela
 mkdir -p "$APP_DIR"
 cp "$DIR_SCRIPT"/app/main.py "$DIR_SCRIPT"/app/requirements.txt "$APP_DIR"/
+cp -r "$DIR_SCRIPT"/app/centinela "$APP_DIR"/
 python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install --upgrade pip -q
 "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"

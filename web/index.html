@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="styles.css"><meta name="theme-color" content="#16203A"><script>if("serviceWorker" in navigator){addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{})})}</script>
 </head>
 <body>
 
@@ -25,6 +25,9 @@
     <a href="#sala">Sala 3D</a>
     <a href="#cluster">Clúster</a>
     <a href="#protegerte">Protégete</a>
+    <a href="#app">App Android</a>
+    <a href="/admin" rel="noopener">Panel admin</a>
+    <button class="tema-btn" id="tema-btn" type="button" title="Cambiar tema claro/oscuro" aria-pressed="false">Tema</button>
   </nav>
   <a class="pulso" href="#cluster" id="pulso" aria-live="polite">
     <span class="punto"></span><span id="pulso-txt">Conectando…</span>
@@ -139,6 +142,10 @@
       </div>
       <div class="bloque">
         <h3>Últimos reportes</h3>
+        <div class="export">
+          <button class="btn-sec" id="export-csv" type="button">Exportar CSV</button>
+          <button class="btn-sec" id="export-json" type="button">Exportar JSON</button>
+        </div>
         <ul class="feed" id="feed"><li class="vacio">Cargando…</li></ul>
       </div>
     </div>
@@ -153,6 +160,14 @@
     <div class="sala-lienzo">
       <canvas id="sala3d" aria-label="Visualización 3D del clúster y las amenazas en vivo"></canvas>
       <span class="sala-chip" id="sala-estado" data-e="cargando">Conectando…</span>
+      <div class="sala-ctrls">
+        <button id="sala-sonido" type="button" aria-pressed="false" title="Activar sonido">🔇</button>
+        <button id="sala-full" type="button" title="Pantalla completa (sala de guerra)">⛶</button>
+      </div>
+      <div class="sala-panel" id="sala-top">
+        <h4>Top ciudades</h4>
+        <ul id="sala-top-lista"><li class="vacio">Esperando reportes…</li></ul>
+      </div>
       <ul class="sala-leyenda" aria-hidden="true">
         <li><i style="background:var(--verde)"></i>Atendiendo / OK</li>
         <li><i style="background:var(--ambar)"></i>En espera</li>
@@ -166,7 +181,7 @@
   <section class="seccion cluster-sec" id="cluster">
     <div class="seccion-cab">
       <h2>El clúster, en vivo</h2>
-      <p>Centinela corre en dos computadores viejos unidos por Tailscale. Si el principal se apaga, el de respaldo atiende en segundos y nadie lo nota.</p>
+      <p>Centinela corre en dos equipos en casas distintas, unidos por Tailscale. Si el principal se apaga, el de respaldo atiende en segundos y nadie lo nota.</p>
     </div>
 
     <div class="aviso-failover" id="aviso-failover" hidden></div>
@@ -174,7 +189,7 @@
     <div class="nodos">
       <article class="nodo" id="nodo-JE" data-estado="cargando">
         <header>
-          <h3>JE <small>principal · todo‑en‑uno AMD Athlon</small></h3>
+          <h3>JE <small>principal · Ryzen 5600G + RTX 4060</small></h3>
           <span class="estado">—</span>
         </header>
         <svg class="ecg" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30 H110 l8 -18 l10 36 l8 -26 l6 8 H300"/></svg>
@@ -189,7 +204,7 @@
       </article>
       <article class="nodo" id="nodo-JP" data-estado="cargando">
         <header>
-          <h3>JP <small>respaldo · laptop</small></h3>
+          <h3>JP <small>respaldo · laptop del compañero</small></h3>
           <span class="estado">—</span>
         </header>
         <svg class="ecg" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30 H110 l8 -18 l10 36 l8 -26 l6 8 H300"/></svg>
@@ -222,6 +237,35 @@
     </div>
   </section>
 
+
+  <!-- APP ANDROID -->
+  <section class="seccion" id="app">
+    <div class="seccion-cab">
+      <h2>App Android (detección automática)</h2>
+      <p>Instala la app en tu Android con SIM (ej. Samsung A50) y cuando entre una llamada real verás <b>Posible SPAM</b> antes del segundo timbre. Sin MacroDroid: código propio en Kotlin.</p>
+    </div>
+    <div class="comunidad">
+      <div class="bloque"><h3>Pasos</h3>
+        <ol style="margin:0;padding-left:22px">
+          <li>Descarga el APK (<a href="app.apk" download>app.apk</a>) en el celular.</li>
+          <li>Abre la app, guarda URL <code>https://centinela.juan-gallego-sec.workers.dev</code> + token (el mismo <code>LLAMADAS_TOKEN</code> del servidor), toca <b>Guardar</b>.</li>
+          <li>Toca <b>Dar permisos</b> y acepta Teléfono, Registro de llamadas y Notificaciones.</li>
+          <li>Toca <b>Probar envío</b> y debe decir <code>OK · +57..., medio (30/100)</code>.</li>
+          <li>Ajustes, Batería, Sin restricciones y <b>reinicia</b> el celular (Samsung lo necesita).</li>
+        </ol>
+        <p class="sub">Si Probar envío dice <code>HTTP 401</code>, el token no coincide; si dice <code>HTTP 503/530</code>, JE/JP están offline.</p>
+      </div>
+      <div class="bloque"><h3>Qué hace la app</h3>
+        <ul style="margin:0;padding-left:22px">
+          <li>Escucha la llamada entrante, avisa a <code>POST /api/llamada</code> y muestra notificación de alta prioridad.</li>
+          <li>Si el servidor está caído, dice <b>Centinela sin servidor</b> (no te engaña con sin reportes).</li>
+          <li>Privacidad: solo envía número + dispositivo (token). Los números sin reportes se enmascaran en la web.</li>
+        </ul>
+        <div class="export"><button class="btn-sec" id="share-reporte" type="button">Compartir reporte</button></div>
+      </div>
+    </div>
+  </section>
+
   <!-- PROTEGERTE -->
   <section class="seccion" id="protegerte">
     <div class="seccion-cab">
@@ -238,7 +282,7 @@
 
 <footer class="pie">
   <p><b>Hecho por JP, JM y JE</b> · Ingeniería de Sistemas · Uniremington</p>
-  <p class="pie-tec">Proyecto de Sistemas Distribuidos · Linux en consola · Tailscale · Cloudflare · Supabase · Ollama · n8n · Telegram</p>
+  <p class="pie-tec">Proyecto de Sistemas Distribuidos · Linux en consola · Tailscale · Cloudflare · Supabase · Ollama · n8n · Telegram · <a href="/admin">Panel admin</a> · <a href="https://github.com/juanSecuri/surprised-system">GitHub</a></p>
 </footer>
 
 <!-- CHATBOT -->
