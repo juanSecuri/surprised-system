@@ -1,7 +1,7 @@
 /* CENTINELA · Sala de control 3D (Three.js, vendorizado para respetar el CSP estricto)
    Globo de amenazas con ciudades reales de Colombia (por indicativo) + clúster vivo,
    sonido en cada amenaza y modo pantalla completa.
-   Las llamadas reales se pintan SOLO en el teléfono del hero (app.js); abrir otro duplicaba la animación y saturaba la web.
+   Las llamadas reales se pintan SOLO en el teléfono del hero (app.js).
    Lee los mismos endpoints que app.js. Si no hay WebGL, se oculta solo. */
 "use strict";
 import * as THREE from "./vendor/three.module.js";
@@ -29,16 +29,57 @@ function arrancar() {
   const luz = new THREE.PointLight(0xaec0ff, 60, 60); luz.position.set(4, 6, 8); scene.add(luz);
   const luz2 = new THREE.PointLight(0x4668e0, 30, 60); luz2.position.set(-6, -3, 4); scene.add(luz2);
 
-  // ---------- GLOBO ----------
+  // ---------- GLOBO TIERRA (procedural, sin imágenes externas por CSP) ----------
   const R = 2.4;
   const globo = new THREE.Group(); scene.add(globo);
-  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R, 32, 22),
-    new THREE.MeshBasicMaterial({ color: COL.cobalto, wireframe: true, transparent: true, opacity: 0.18 })));
-  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R * 0.985, 32, 22),
-    new THREE.MeshPhongMaterial({ color: 0x101a33, emissive: 0x0b1226, shininess: 8, transparent: true, opacity: 0.92 })));
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 1.12, 24, 16),
-    new THREE.MeshBasicMaterial({ color: COL.acento, transparent: true, opacity: 0.06, side: THREE.BackSide }));
+  // textura procedural Tierra: océano oscuro + continentes aprox + graticula
+  function texturaTierra() {
+    const w = 1024, h = 512;
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#0a1a33"; g.fillRect(0, 0, w, h); // océano
+    // continentes aprox (lon/lat -> x/y)
+    const tierra = (lon, lat, rx, ry) => { const x = (lon + 180) / 360 * w, y = (90 - lat) / 180 * h; g.fillStyle = "#1a3a5f"; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fill(); };
+    // Norteamérica
+    tierra(-100, 45, 110, 45); tierra(-80, 35, 40, 30); tierra(-120, 60, 70, 25);
+    // Sudamérica
+    tierra(-60, -10, 55, 55); tierra(-55, -25, 30, 25);
+    // África
+    tierra(20, 5, 60, 45); tierra(10, 20, 40, 20);
+    // Europa
+    tierra(10, 50, 35, 20); tierra(25, 60, 30, 15);
+    // Asia
+    tierra(80, 45, 120, 40); tierra(110, 30, 60, 30); tierra(75, 20, 25, 20);
+    // Oceanía
+    tierra(135, -25, 35, 22);
+    // graticula suave
+    g.strokeStyle = "rgba(122,147,255,0.12)"; g.lineWidth = 1;
+    for (let i = 0; i < 360; i += 15) { g.beginPath(); g.moveTo(i / 360 * w, 0); g.lineTo(i / 360 * w, h); g.stroke(); }
+    for (let j = 0; j < 180; j += 15) { g.beginPath(); g.moveTo(0, j / 180 * h); g.lineTo(w, j / 180 * h); g.stroke(); }
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+  }
+  const tierraTex = texturaTierra();
+  // malla wireframe (malla del globo)
+  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R, 48, 32),
+    new THREE.MeshBasicMaterial({ color: COL.cobalto, wireframe: true, transparent: true, opacity: 0.14 })));
+  // superficie sólida Tierra
+  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R * 0.985, 64, 48),
+    new THREE.MeshPhongMaterial({ map: tierraTex, emissive: 0x0b1226, shininess: 8, transparent: true, opacity: 0.96 })));
+  // atmósfera (BackSide glow)
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 1.18, 32, 24),
+    new THREE.MeshBasicMaterial({ color: COL.acento, transparent: true, opacity: 0.08, side: THREE.BackSide }));
   globo.add(halo);
+  // estrellas (puntos fuera del globo)
+  {
+    const N2 = 900; const pos = new Float32Array(N2 * 3);
+    for (let i = 0; i < N2; i++) {
+      const r = 7 + Math.random() * 18, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(ph) * Math.cos(th); pos[i * 3 + 1] = r * Math.cos(ph); pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xaac0ff, size: 0.04, transparent: true, opacity: 0.7 }));
+    scene.add(stars);
+  }
 
   function enGlobo(lat, lon, r = R) {
     const phi = (90 - lat) * Math.PI / 180, theta = (lon + 180) * Math.PI / 180;
@@ -214,6 +255,56 @@ function arrancar() {
       if (vistos.size > 200) vistos.clear();
     } catch {}
   }
+
+  // ---------- cámara + controles ----------
+  let objT = 0.35, theta = 0.35, phi = 0.12, objP = 0.12, arrastrando = false, px = 0, py = 0;
+  const foco = new THREE.Vector3(0, 0.1, 1.2);
+  lienzo.addEventListener("pointerdown", (e) => { armarAudio(); arrastrando = true; px = e.clientX; py = e.clientY; lienzo.setPointerCapture(e.pointerId); });
+  lienzo.addEventListener("pointerup", (e) => { arrastrando = false; try { lienzo.releasePointerCapture(e.pointerId); } catch {} });
+  lienzo.addEventListener("pointermove", (e) => {
+    if (!arrastrando) return;
+    objT += (e.clientX - px) * 0.005; objP += (e.clientY - py) * 0.005; px = e.clientX; py = e.clientY;
+    objT = Math.max(-0.9, Math.min(0.9, objT)); objP = Math.max(-0.35, Math.min(0.6, objP));
+  });
+  function medir() {
+    const w = lienzo.clientWidth, h = lienzo.clientHeight || Math.round(w * 0.62);
+    renderer.setSize(w, h, false); camara.aspect = w / h; camara.updateProjectionMatrix();
+  }
+  new ResizeObserver(medir).observe(lienzo); medir();
+
+  // botones: sonido + pantalla completa
+  const btnSon = document.getElementById("sala-sonido");
+  if (btnSon) btnSon.addEventListener("click", () => { armarAudio(); sonidoOn = !sonidoOn; btnSon.textContent = sonidoOn ? "🔊" : "🔇"; btnSon.setAttribute("aria-pressed", String(sonidoOn)); if (sonidoOn) ping("medio"); });
+  const btnFull = document.getElementById("sala-full");
+  const caja = document.querySelector(".sala-lienzo");
+  if (btnFull && caja) btnFull.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else caja.requestFullscreen && caja.requestFullscreen(); });
+  document.addEventListener("fullscreenchange", () => setTimeout(medir, 60));
+
+  // ---------- bucle ----------
+  const reloj = new THREE.Clock();
+  function animar() {
+    const dt = Math.min(0.05, reloj.getDelta());
+    if (!reduce) globo.rotation.y += dt * 0.05;
+    theta += (objT - theta) * 0.08; phi += (objP - phi) * 0.08;
+    const rad = 8.6;
+    camara.position.set(Math.sin(theta) * rad, 1.1 + phi * 3, Math.cos(theta) * rad);
+    camara.lookAt(foco);
+    Object.values(N).forEach((n) => { if (!reduce) n.anillo.rotation.z += dt * 0.6; });
+    paquetes.forEach((p) => { p.t += dt * p.vel; if (p.t > 1) p.t -= 1; p.m.position.lerpVectors(p.a, p.b, p.t); });
+    for (let i = arcos.length - 1; i >= 0; i--) {
+      const a = arcos[i];
+      if (a.fase === "viaja") {
+        a.t += dt * 0.5; a.punta.position.copy(a.curva.getPointAt(Math.min(1, a.t)));
+        if (a.t >= 1) { a.fase = "apaga"; globo.remove(a.punta); }
+      } else { a.vida -= dt * 0.25; a.tubo.material.opacity = Math.max(0, a.vida * 0.85); if (a.vida <= 0) { globo.remove(a.tubo); arcos.splice(i, 1); } }
+    }
+    if (flash > 0) { flash = Math.max(0, flash - dt * 1.2); halo.material.opacity = 0.06 + flash * 0.35; halo.material.color.setHex(flash > 0.5 ? COL.rojo : COL.acento); }
+    else halo.material.color.setHex(COL.acento);
+    renderer.render(scene, camara);
+  }
+  renderer.setAnimationLoop(() => { if (!document.hidden) animar(); });
+
+  // ---------- arranque de datos (optimizado: app.js ya hace llamadas al hero; aquí solo cluster + amenazas) ----------
   estadoCluster(); amenazas(true);
   setInterval(() => { if (!document.hidden) estadoCluster(); }, 10000);
   setInterval(() => { if (!document.hidden) amenazas(false); }, 12000);
