@@ -156,8 +156,31 @@ function loginHtml(error, totp) {
   return `<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1"><title>Centinela · Panel</title><style>${LOGIN_CSS}</style></head><body><div class=card><h1>🛡️ Centinela · Panel</h1><p class=sub>Acceso solo para el equipo (profesor / admin)</p>${err}<form method=post action="/admin/login"><label>Usuario</label><input name=usuario autocomplete=username required autofocus><label>Contraseña</label><input name=clave type=password autocomplete=current-password required>${totpHtml}<button>Entrar</button></form><p class=count>Verificación: PBKDF2-HMAC-SHA256 · cookie firmada HMAC · bloqueo tras 5 intentos/IP · TOTP opcional (Aegis).</p></div></body></html>`;
 }
 
-function panelHtml(username) {
-  return `<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1"><title>Centinela · Panel</title><style>${LOGIN_CSS} table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px} th,td{padding:8px;border-bottom:1px solid #283252;text-align:left} th{color:#9ba5bd} a{color:#7a93ff} .top{max-width:1100px;margin:0 auto} .hdr{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap} .stats{color:#9ba5bd;font-size:14px} .okp{color:#7dffa9}</style></head><body><div class=top><div class=hdr><h1>Panel de Centinela</h1><a href="/admin/salir">Salir (${username})</a></div><p class=stats id=stats>Cargando…</p><table><thead><tr><th>Número</th><th>País</th><th>Riesgo</th><th>Nivel</th><th>Reportes</th><th>Tipo</th></tr></thead><tbody id=rows><tr><td colspan=6>Cargando…</td></tr></tbody></table><p class=count>Datos vía /api/top y /api/stats (JE/JP). Si Supabase cae, el panel muestra lo que alcanzó a cargar.</p></div><script>const F=(n)=>{const m=n&&n.match(/^\\+57(\\d{3})(\\d{3})(\\d{4})$/);return m?"+57 "+m[1]+" "+m[2]+" "+m[3]:n};const CAT={estafa:"Estafa",suplantacion:"Falso banco",cobranza:"Cobranza",telemarketing:"Telemarketing",wangiri:"Wangiri",extorsion:"Extorsión",encuesta:"Encuesta",otro:"Otro"};async function load(){try{const a=await fetch("/api/stats");const s=await a.json();document.getElementById("stats").innerHTML=s.numeros+" números · "+s.reportes+" reportes · "+s.alto_riesgo+" de riesgo alto (vía "+(a.headers.get("X-Centinela-Nodo")||"JE")+")";const b=await fetch("/api/top?limite=100");const top=await b.json();document.getElementById("rows").innerHTML=top.map(f=>"<tr><td>"+F(f.numero)+"</td><td>"+(f.pais||"")+"</td><td>"+f.score+"</td><td>"+f.nivel+"</td><td>"+f.total_reportes+"</td><td>"+(CAT[f.categoria_principal]||"—")+"</td></tr>").join("")||"<tr><td colspan=6>Sin números todavía</td></tr>"}catch(e){document.getElementById("stats").textContent="Sin conexión a la base (reintenta en unos segundos)."}};load()</script></body></html>`;
+function escHtml(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function fmtNum(n){var m=n&&String(n).match(/^\+57(\d{3})(\d{3})(\d{4})$/);return m?"+57 "+m[1]+" "+m[2]+" "+m[3]:(n||"");}
+var CAT_PANEL={estafa:"Estafa",suplantacion:"Falso banco",cobranza:"Cobranza",telemarketing:"Telemarketing",wangiri:"Wangiri",extorsion:"Extorsion",encuesta:"Encuesta",otro:"Otro"};
+async function datosPanel(env){
+  for (const n of nodos(env)) {
+    try {
+      const c = new AbortController(); const t = setTimeout(() => c.abort(), 8000);
+      try {
+        const s = await (await fetch(n.base + "/api/stats", { signal: c.signal })).json();
+        const tp = await (await fetch(n.base + "/api/top?limite=100", { signal: c.signal })).json();
+        return { stats: s, top: Array.isArray(tp) ? tp : [], nodo: n.nombre };
+      } finally { clearTimeout(t); }
+    } catch (e) {}
+  }
+  return { stats: null, top: [], nodo: null };
+}
+function panelHtml(username, d) {
+  d = d || { stats: null, top: [], nodo: null };
+  const linea = d.stats
+    ? (d.stats.numeros + " numeros · " + d.stats.reportes + " reportes · " + d.stats.alto_riesgo + " de riesgo alto (via " + (d.nodo || "JE") + ")")
+    : "Sin conexion a la base (recarga en unos segundos).";
+  const filas = (d.top && d.top.length)
+    ? d.top.map(function(f){return "<tr><td>" + escHtml(fmtNum(f.numero)) + "</td><td>" + escHtml(f.pais||"") + "</td><td>" + escHtml(f.score) + "</td><td>" + escHtml(f.nivel) + "</td><td>" + escHtml(f.total_reportes) + "</td><td>" + escHtml(CAT_PANEL[f.categoria_principal]||"—") + "</td></tr>";}).join("")
+    : "<tr><td colspan=6>Sin numeros todavia</td></tr>";
+  return `<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1"><title>Centinela · Panel</title><style>${LOGIN_CSS} table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px} th,td{padding:8px;border-bottom:1px solid #283252;text-align:left} th{color:#9ba5bd} a{color:#7a93ff} .top{max-width:1100px;margin:0 auto} .hdr{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap} .stats{color:#9ba5bd;font-size:14px} .count{color:#9ba5bd;font-size:12px;margin-top:12px}</style></head><body><div class=top><div class=hdr><h1>Panel de Centinela</h1><a href="/admin/salir">Salir (${escHtml(username)})</a></div><p class=stats>${linea}</p><table><thead><tr><th>Numero</th><th>Pais</th><th>Riesgo</th><th>Nivel</th><th>Reportes</th><th>Tipo</th></tr></thead><tbody>${filas}</tbody></table><p class=count>Datos de /api/top y /api/stats (JE/JP), cargados por el gateway. Sin scripts en el navegador — compatible con el blindaje (CSP).</p></div></body></html>`;
 }
 
 async function handleAdmin(req, env, url) {
@@ -210,7 +233,8 @@ async function handleAdmin(req, env, url) {
   }
   // GET /admin
   if (!valid) return new Response("", { status: 303, headers: { Location: "/admin/login" } });
-  return new Response(panelHtml(user), { headers: { "content-type": "text/html; charset=utf-8" } });
+  const d = await datosPanel(env);
+  return new Response(panelHtml(user, d), { headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
 export default {
