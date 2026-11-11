@@ -189,9 +189,9 @@ function panelHtml(username, d) {
   return "<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content=\"width=device-width, initial-scale=1\"><title>Centinela · Panel</title><style>" + LOGIN_CSS + EXTRA + "</style></head><body><div class=top>"
     + "<div class=hdr><h1>Panel de Centinela</h1><a href=\"/admin/salir\">Salir (" + escHtml(username) + ")</a></div>"
     + "<div class=ctrl><div class=ctrl-top><div><span class=lbl>Atendiendo ahora</span><div class=act>" + escHtml(act) + "</div></div>"
-    + "<div class=grupo>" + btn("JE","pausar","rojo","⏸ Detener JE (simular caida)") + btn("JE","reactivar","verde","▶ Reactivar JE") + "</div></div>"
+    + "<div class=grupo>" + btn("JE","pausar","rojo","⏸ Detener JE") + btn("JE","reactivar","verde","▶ Reactivar JE") + "</div></div>"
     + "<div class=jp><span class=lbl>Respaldo</span>" + btn("JP","pausar","rojo chico","Detener JP") + btn("JP","reactivar","verde chico","Reactivar JP") + "</div>"
-    + "<p class=nota>Detener un nodo simula su caida: el gateway hace failover al otro en segundos. Mira la pestaña Clúster o Sala 3D, y reactiva para repetir.</p></div>"
+    + "<p class=nota>Detener un nodo lo deja de atender DE VERDAD (responde 503): el gateway enruta el tráfico al otro nodo (otra máquina, otro internet). Reactiva para repetir.</p></div>"
     + "<p class=stats>" + linea + " · datos vía " + escHtml(act) + "</p>"
     + "<table><thead><tr><th>Numero</th><th>Pais</th><th>Riesgo</th><th>Nivel</th><th>Reportes</th><th>Tipo</th></tr></thead><tbody>" + filas + "</tbody></table>"
     + "<p class=count>Datos de /api/top y /api/stats (JE/JP), cargados por el gateway. Sin scripts en el navegador — compatible con el blindaje (CSP).</p></div></body></html>";
