@@ -1,5 +1,5 @@
 /* Centinela PWA: cache-first para que la web sirva sin internet (modo degradado). */
-const CACHE = "centinela-v2";
+const CACHE = "centinela-v3";
 const ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/sala3d.js", "/manifest.webmanifest", "/vendor/three.module.js", "/vendor/earth.jpg"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(()=>{})); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k)=>k!==CACHE).map((k)=>caches.delete(k))))); self.clients.claim(); });
