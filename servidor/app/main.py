@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from centinela.config import VERSION, CORS_ORIGINS, LIMITE_GLOBAL, NODO, log
+from centinela.config import VERSION, CORS_ORIGINS, LIMITE_GLOBAL, NODO, log, MANTENIMIENTO
 from centinela.db import pool, local, evento
 from centinela.servicios import latido, sincronizador, vigilar_ia, _exceso
 from centinela.utilidades import ip_cliente
@@ -60,6 +60,12 @@ app.add_middleware(
 
 @app.middleware("http")
 async def guardia(request: Request, call_next):
+    # Modo mantenimiento: el panel puede "detener" este nodo para demostrar el failover.
+    # Devuelve 503 en todo (menos /api/control, para poder reactivarlo) -> el gateway salta al otro nodo.
+    if MANTENIMIENTO["on"] and request.url.path != "/api/control":
+        r = Response('{"error":"Nodo en mantenimiento","nodo":"' + NODO + '"}', status_code=503, media_type="application/json")
+        r.headers["X-Centinela-Nodo"] = NODO
+        return r
     # Escudo por IP en el propio nodo: si el gateway cae o atacan por el Funnel directo,
     # ninguna IP puede inundar la API. /health, /ping y / quedan libres (los usa el clúster).
     if request.url.path not in ("/health", "/ping", "/"):

@@ -164,8 +164,11 @@ async function datosPanel(env){
     try {
       const c = new AbortController(); const t = setTimeout(() => c.abort(), 8000);
       try {
-        const s = await (await fetch(n.base + "/api/stats", { signal: c.signal })).json();
-        const tp = await (await fetch(n.base + "/api/top?limite=100", { signal: c.signal })).json();
+        const sres = await fetch(n.base + "/api/stats", { signal: c.signal });
+        if (!sres.ok) throw new Error("down");
+        const s = await sres.json();
+        const tres = await fetch(n.base + "/api/top?limite=100", { signal: c.signal });
+        const tp = tres.ok ? await tres.json() : [];
         return { stats: s, top: Array.isArray(tp) ? tp : [], nodo: n.nombre };
       } finally { clearTimeout(t); }
     } catch (e) {}
@@ -174,13 +177,24 @@ async function datosPanel(env){
 }
 function panelHtml(username, d) {
   d = d || { stats: null, top: [], nodo: null };
+  const act = d.nodo || "sin conexion";
   const linea = d.stats
-    ? (d.stats.numeros + " numeros · " + d.stats.reportes + " reportes · " + d.stats.alto_riesgo + " de riesgo alto (via " + (d.nodo || "JE") + ")")
+    ? (d.stats.numeros + " numeros · " + d.stats.reportes + " reportes · " + d.stats.alto_riesgo + " de riesgo alto")
     : "Sin conexion a la base (recarga en unos segundos).";
   const filas = (d.top && d.top.length)
     ? d.top.map(function(f){return "<tr><td>" + escHtml(fmtNum(f.numero)) + "</td><td>" + escHtml(f.pais||"") + "</td><td>" + escHtml(f.score) + "</td><td>" + escHtml(f.nivel) + "</td><td>" + escHtml(f.total_reportes) + "</td><td>" + escHtml(CAT_PANEL[f.categoria_principal]||"—") + "</td></tr>";}).join("")
     : "<tr><td colspan=6>Sin numeros todavia</td></tr>";
-  return `<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1"><title>Centinela · Panel</title><style>${LOGIN_CSS} table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px} th,td{padding:8px;border-bottom:1px solid #283252;text-align:left} th{color:#9ba5bd} a{color:#7a93ff} .top{max-width:1100px;margin:0 auto} .hdr{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap} .stats{color:#9ba5bd;font-size:14px} .count{color:#9ba5bd;font-size:12px;margin-top:12px}</style></head><body><div class=top><div class=hdr><h1>Panel de Centinela</h1><a href="/admin/salir">Salir (${escHtml(username)})</a></div><p class=stats>${linea}</p><table><thead><tr><th>Numero</th><th>Pais</th><th>Riesgo</th><th>Nivel</th><th>Reportes</th><th>Tipo</th></tr></thead><tbody>${filas}</tbody></table><p class=count>Datos de /api/top y /api/stats (JE/JP), cargados por el gateway. Sin scripts en el navegador — compatible con el blindaje (CSP).</p></div></body></html>`;
+  const btn = function(nodo, accion, clase, txt){ return '<form method=post action="/admin/control"><input type=hidden name=nodo value="' + nodo + '"><input type=hidden name=accion value="' + accion + '"><button class="' + clase + '">' + txt + '</button></form>'; };
+  const EXTRA = " .hdr{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:4px} .top{max-width:1100px;margin:0 auto} table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px} th,td{padding:8px;border-bottom:1px solid #283252;text-align:left} th{color:#9ba5bd} a{color:#7a93ff} .stats{color:#9ba5bd;font-size:14px;margin:0 0 8px} .ctrl{background:#161e33;border:1px solid #283252;border-radius:12px;padding:16px;margin:12px 0 18px} .ctrl-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px} .act{font-size:22px;font-weight:700;color:#7dffa9;margin-top:2px} .lbl{color:#9ba5bd;font-size:12px;text-transform:uppercase;letter-spacing:.04em} .grupo{display:flex;gap:10px;flex-wrap:wrap} .ctrl form{display:inline;margin:0} .ctrl button{width:auto;margin-top:0;padding:10px 14px;font-size:14px} .rojo{background:#cc2539} .verde{background:#1f9d57} .chico{padding:7px 11px;font-size:13px;opacity:.92} .jp{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center} .jp .lbl{margin-right:4px} .nota{color:#9ba5bd;font-size:13px;margin:12px 0 0} .count{color:#9ba5bd;font-size:12px;margin-top:14px}";
+  return "<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content=\"width=device-width, initial-scale=1\"><title>Centinela · Panel</title><style>" + LOGIN_CSS + EXTRA + "</style></head><body><div class=top>"
+    + "<div class=hdr><h1>Panel de Centinela</h1><a href=\"/admin/salir\">Salir (" + escHtml(username) + ")</a></div>"
+    + "<div class=ctrl><div class=ctrl-top><div><span class=lbl>Atendiendo ahora</span><div class=act>" + escHtml(act) + "</div></div>"
+    + "<div class=grupo>" + btn("JE","pausar","rojo","⏸ Detener JE (simular caida)") + btn("JE","reactivar","verde","▶ Reactivar JE") + "</div></div>"
+    + "<div class=jp><span class=lbl>Respaldo</span>" + btn("JP","pausar","rojo chico","Detener JP") + btn("JP","reactivar","verde chico","Reactivar JP") + "</div>"
+    + "<p class=nota>Detener un nodo simula su caida: el gateway hace failover al otro en segundos. Mira la pestaña Clúster o Sala 3D, y reactiva para repetir.</p></div>"
+    + "<p class=stats>" + linea + " · datos vía " + escHtml(act) + "</p>"
+    + "<table><thead><tr><th>Numero</th><th>Pais</th><th>Riesgo</th><th>Nivel</th><th>Reportes</th><th>Tipo</th></tr></thead><tbody>" + filas + "</tbody></table>"
+    + "<p class=count>Datos de /api/top y /api/stats (JE/JP), cargados por el gateway. Sin scripts en el navegador — compatible con el blindaje (CSP).</p></div></body></html>";
 }
 
 async function handleAdmin(req, env, url) {
@@ -231,6 +245,20 @@ async function handleAdmin(req, env, url) {
     if (valid) return new Response("", { status: 303, headers: { Location: "/admin" } });
     return new Response(loginHtml("", Boolean(totp)), { headers: { "content-type": "text/html; charset=utf-8" } });
   }
+  if (req.method === "POST" && url.pathname === "/admin/control") {
+    if (!valid) return new Response("", { status: 303, headers: { Location: "/admin/login" } });
+    const body = await req.text();
+    const params = new URLSearchParams(body);
+    const nodo = params.get("nodo") === "JP" ? "JP" : "JE";
+    const accion = params.get("accion") === "pausar" ? "pausar" : "reactivar";
+    const base = ((nodo === "JE" ? env.NODO_PRINCIPAL : env.NODO_RESPALDO) || "").replace(/\/$/, "");
+    try {
+      const c = new AbortController(); const t = setTimeout(() => c.abort(), 8000);
+      try { await fetch(base + "/api/control?accion=" + accion, { method: "POST", headers: { "x-centinela-control": env.CONTROL_TOKEN || "" }, signal: c.signal }); }
+      finally { clearTimeout(t); }
+    } catch (e) {}
+    return new Response("", { status: 303, headers: { Location: "/admin" } });
+  }
   // GET /admin
   if (!valid) return new Response("", { status: 303, headers: { Location: "/admin/login" } });
   const d = await datosPanel(env);
@@ -244,7 +272,7 @@ export default {
 
     const ip = req.headers.get("CF-Connecting-IP") || "0.0.0.0";
     // Admin en el borde si hay credenciales (profesor): no depende de JE
-    const esAdmin = url.pathname === "/admin" || url.pathname === "/admin/login" || url.pathname === "/admin/salir";
+    const esAdmin = url.pathname === "/admin" || url.pathname === "/admin/login" || url.pathname === "/admin/salir" || url.pathname === "/admin/control";
     if (esAdmin && env.ADMIN_USER && env.ADMIN_HASH) {
       return cors(await handleAdmin(req, env, url));
     }

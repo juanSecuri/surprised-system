@@ -5,8 +5,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from .config import NODO, ROL, VERSION, INICIO, CAT_TXT, EMOJI, LLAMADAS_TOKEN, CONSEJOS, log
-from .db import q, local, db_ok, ficha, stats_completas, top_numeros, recientes_reportes, cluster_data
+from .config import NODO, ROL, VERSION, INICIO, CAT_TXT, EMOJI, LLAMADAS_TOKEN, CONTROL_TOKEN, MANTENIMIENTO, CONSEJOS, log
+from .db import q, local, db_ok, ficha, stats_completas, top_numeros, recientes_reportes, cluster_data, evento
 from .utilidades import normalizar, ip_cliente, metricas, formato, enmascarar, texto_ficha
 from .ia import ollama_disponible, ollama_chat
 from .servicios import registrar_reporte, telegram_enviar, _exceso
@@ -102,6 +102,16 @@ def registrar(app: FastAPI):
     def health():
         with local() as c: pend = c.execute("select count(*) n from pendientes").fetchone()["n"]
         return {"ok": True, "nodo": NODO, "rol": ROL, "version": VERSION, "db": db_ok(), "ollama": ollama_disponible(), "pendientes": pend, "uptime_seg": int((datetime.now(timezone.utc) - INICIO).total_seconds()), **metricas()}
+
+    @app.post("/api/control")
+    def control(request: Request, accion: str = ""):
+        # Lo llama SOLO el gateway (profesor autenticado). Detener = simular caida -> failover al otro nodo.
+        token = request.headers.get("x-centinela-control")
+        if not CONTROL_TOKEN or token != CONTROL_TOKEN: raise HTTPException(401, "No autorizado")
+        MANTENIMIENTO["on"] = (accion == "pausar")
+        try: evento("mantenimiento" if MANTENIMIENTO["on"] else "reactivado", f"Nodo {NODO} " + ("detenido desde el panel (simulacion de caida)" if MANTENIMIENTO["on"] else "reactivado desde el panel"))
+        except Exception: pass
+        return {"ok": True, "nodo": NODO, "pausado": MANTENIMIENTO["on"]}
 
     @app.get("/api/numero/{numero}")
     def consultar(numero: str): return ficha(normalizar(numero))

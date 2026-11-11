@@ -25,6 +25,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_API = os.getenv("TELEGRAM_API", "https://api.telegram.org")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")  # a quién avisar de llamadas reales
 LLAMADAS_TOKEN = os.getenv("LLAMADAS_TOKEN", "")  # clave que usa el celular para avisar
+CONTROL_TOKEN = os.getenv("CONTROL_TOKEN", "")  # clave que usa el gateway para detener/reactivar el nodo
+MANTENIMIENTO = {"on": False}  # el panel puede "detener" (simular caida) este nodo para demostrar el failover
 
 # Neon (plan gratis) apaga la BD tras 5 min sin uso y cobra horas de cómputo:
 # con Neon se late cada 15 min y no se dejan conexiones abiertas.
