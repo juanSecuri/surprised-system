@@ -1,6 +1,6 @@
 /* CENTINELA · Sala de control 3D (Three.js vendorizado para respetar el CSP estricto)
    Globo de amenazas con la Tierra real (./vendor/earth.jpg) + clúster vivo.
-   - Arrastrar = girar el globo con inercia (se bloquea en el zoom de Colombia).
+   - Arrastrar = girar el globo con inercia (también dentro del zoom de Colombia).
    - Clic en el punto verde de Colombia = zoom estable + pines de las 7 ciudades.
    - Las llamadas reales se pintan SOLO en el teléfono del hero (app.js).
    Si no hay WebGL, la sección se oculta sola. No hay recursos externos. */
@@ -377,9 +377,9 @@ function arrancar() {
     pines.forEach((p) => { p.grupo.visible = on; });
     if (capaPines) capaPines.classList.toggle("activa", on);
     if (btnVolver) btnVolver.hidden = !on;
-    lienzo.style.cursor = on ? "default" : "grab";
+    lienzo.style.cursor = "grab";
     lienzo.setAttribute("aria-label", on
-      ? "Colombia ampliada. Ciudades con reportes. Pulsa Volver o Escape para salir."
+      ? "Colombia ampliada. Arrastra para girar el globo. Ciudades con reportes. Pulsa Volver o Escape para salir."
       : "Visualización 3D del clúster y las amenazas en vivo. Clic en el punto verde para acercar Colombia.");
   }
 
@@ -484,13 +484,14 @@ function arrancar() {
   lienzo.addEventListener("pointermove", (e) => {
     if (arrastrando) {
       if (Math.abs(e.clientX - abajoX) + Math.abs(e.clientY - abajoY) > 7) movido = true;
-      if (zoomOn) return;
-      velY = (e.clientX - px) * 0.006; velX = (e.clientY - py) * 0.006;
+      // En el zoom el globo está más cerca: bajamos la sensibilidad para girarlo con control.
+      const sens = zoomOn ? 0.003 : 0.006;
+      velY = (e.clientX - px) * sens; velX = (e.clientY - py) * sens;
       px = e.clientX; py = e.clientY;
       globo.rotation.y += velY;
       globo.rotation.x = Math.max(-1.0, Math.min(1.0, globo.rotation.x + velX));
-    } else if (!zoomOn && apuntar(e)) {
-      lienzo.style.cursor = sobreCasa() ? "pointer" : "grab";
+    } else if (apuntar(e)) {
+      lienzo.style.cursor = !zoomOn && sobreCasa() ? "pointer" : "grab";
     }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && zoomOn) setZoom(false); });
@@ -525,19 +526,17 @@ function arrancar() {
     const dt = Math.min(0.05, reloj.getDelta());
     t += dt;
 
-    if (!zoomOn && !arrastrando) {
+    if (!arrastrando) {
       globo.rotation.y += velY;
       globo.rotation.x = Math.max(-1.0, Math.min(1.0, globo.rotation.x + velX));
-      velY *= 0.95; velX *= 0.95;
-      if (!reduce && Math.abs(velY) < 0.0004 && Math.abs(velX) < 0.0004) globo.rotation.y += 0.0006;
+      // En el zoom frenamos antes: el país se mantiene a la vista.
+      const freno = zoomOn ? 0.86 : 0.95;
+      velY *= freno; velX *= freno;
+      // Deriva lenta solo en la vista general: en el zoom manda el usuario.
+      if (!zoomOn && !reduce && Math.abs(velY) < 0.0004 && Math.abs(velX) < 0.0004) globo.rotation.y += 0.0006;
     }
 
-    // El zoom sigue al marcador de Colombia; la rotación queda bloqueada.
-    if (zoomOn) {
-      marcaCasa.getWorldPosition(_casaMundo);
-      camObjetivo.copy(_casaMundo).normalize().multiplyScalar(R + 1.55);
-      lookObjetivo.copy(_casaMundo);
-    }
+    // En el zoom la cámara queda fija a distancia de Colombia y el globo gira debajo.
     const k = reduce ? 1 : 1 - Math.pow(0.0015, dt);
     camara.position.lerp(camObjetivo, k);
     lookActual.lerp(lookObjetivo, k);
