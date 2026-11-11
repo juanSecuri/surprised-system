@@ -415,3 +415,8 @@ try {
   const guardado = localStorage.getItem("centinela-tema");
   if (guardado) { document.documentElement.dataset.tema = guardado; $("#tema-btn").textContent = guardado === "oscuro" ? "Claro" : "Oscuro"; }
 } catch {}
+
+/* PWA: registro externo (sin <script> inline, compatible con el CSP estricto) */
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}

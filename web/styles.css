@@ -401,6 +401,34 @@ h3 { font-size: 18px; font-weight: 700; }
 .sala-lienzo:fullscreen .sala-panel { font-size: 15px; top: 70px; left: 24px; }
 @media (max-width: 560px) { .sala-panel { display: none; } }
 
+/* Zoom de Colombia: pines, etiquetas de tamaño constante y líneas-guía */
+.sala-pines {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0; transition: opacity .22s ease;
+}
+.sala-pines.activa { opacity: 1; }
+.sala-pines svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.sala-pines polyline { fill: none; stroke: rgba(142,162,255,.55); stroke-width: 1; stroke-linejoin: round; }
+.sala-pin-etq {
+  position: absolute; top: 0; left: 0; white-space: nowrap;
+  padding: 3px 8px; border-radius: 999px;
+  font: 600 11px/1.25 Archivo, system-ui, sans-serif;
+  color: #dfe6ff; background: rgba(10,16,32,.78);
+  border: 1px solid rgba(142,162,255,.28);
+  backdrop-filter: blur(4px);
+  transition: color .2s, background .2s, border-color .2s;
+}
+.sala-pin-etq.con-reportes { color: #fff; background: rgba(35,70,216,.7); border-color: rgba(142,162,255,.7); }
+.sala-volver {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 3; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  font: 600 13px Archivo, system-ui, sans-serif;
+  color: #e7ebf4; background: rgba(10,16,32,.82);
+  border: 1px solid rgba(142,162,255,.35); backdrop-filter: blur(6px);
+}
+.sala-volver:hover { background: rgba(35,70,216,.55); }
+.sala-volver[hidden] { display: none; }
+
 /* ---------- extras: exportar / tema / app ---------- */
 .tema-btn { cursor: pointer; background: var(--superficie); border: 1px solid var(--linea); border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 14px; color: var(--tinta); }
 .export { display: flex; gap: 8px; margin: 10px 0 14px; flex-wrap: wrap; }
