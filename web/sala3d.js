@@ -25,49 +25,24 @@ function arrancar() {
 
   const scene = new THREE.Scene();
   const camara = new THREE.PerspectiveCamera(48, 2, 0.1, 100);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const luz = new THREE.PointLight(0xaec0ff, 60, 60); luz.position.set(4, 6, 8); scene.add(luz);
-  const luz2 = new THREE.PointLight(0x4668e0, 30, 60); luz2.position.set(-6, -3, 4); scene.add(luz2);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const sol = new THREE.DirectionalLight(0xffffff, 1.35); sol.position.set(5, 3, 5); scene.add(sol);
+  const relleno = new THREE.DirectionalLight(0x5a79c8, 0.3); relleno.position.set(-5, -2, -4); scene.add(relleno);
 
-  // ---------- GLOBO TIERRA (procedural, sin imágenes externas por CSP) ----------
+  // ---------- GLOBO TIERRA (textura real, vendorizada localmente por CSP) ----------
   const R = 2.4;
   const globo = new THREE.Group(); scene.add(globo);
-  // textura procedural Tierra: océano oscuro + continentes aprox + graticula
-  function texturaTierra() {
-    const w = 1024, h = 512;
-    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-    const g = cv.getContext("2d");
-    g.fillStyle = "#0a1a33"; g.fillRect(0, 0, w, h); // océano
-    // continentes aprox (lon/lat -> x/y)
-    const tierra = (lon, lat, rx, ry) => { const x = (lon + 180) / 360 * w, y = (90 - lat) / 180 * h; g.fillStyle = "#1a3a5f"; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fill(); };
-    // Norteamérica
-    tierra(-100, 45, 110, 45); tierra(-80, 35, 40, 30); tierra(-120, 60, 70, 25);
-    // Sudamérica
-    tierra(-60, -10, 55, 55); tierra(-55, -25, 30, 25);
-    // África
-    tierra(20, 5, 60, 45); tierra(10, 20, 40, 20);
-    // Europa
-    tierra(10, 50, 35, 20); tierra(25, 60, 30, 15);
-    // Asia
-    tierra(80, 45, 120, 40); tierra(110, 30, 60, 30); tierra(75, 20, 25, 20);
-    // Oceanía
-    tierra(135, -25, 35, 22);
-    // graticula suave
-    g.strokeStyle = "rgba(122,147,255,0.12)"; g.lineWidth = 1;
-    for (let i = 0; i < 360; i += 15) { g.beginPath(); g.moveTo(i / 360 * w, 0); g.lineTo(i / 360 * w, h); g.stroke(); }
-    for (let j = 0; j < 180; j += 15) { g.beginPath(); g.moveTo(0, j / 180 * h); g.lineTo(w, j / 180 * h); g.stroke(); }
-    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
-  }
-  const tierraTex = texturaTierra();
-  // malla wireframe (malla del globo)
-  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R, 48, 32),
-    new THREE.MeshBasicMaterial({ color: COL.cobalto, wireframe: true, transparent: true, opacity: 0.14 })));
-  // superficie sólida Tierra
-  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R * 0.985, 64, 48),
-    new THREE.MeshPhongMaterial({ map: tierraTex, emissive: 0x0b1226, shininess: 8, transparent: true, opacity: 0.96 })));
-  // atmósfera (BackSide glow)
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 1.18, 32, 24),
-    new THREE.MeshBasicMaterial({ color: COL.acento, transparent: true, opacity: 0.08, side: THREE.BackSide }));
+  const tierraTex = new THREE.TextureLoader().load("./vendor/earth.jpg");
+  tierraTex.colorSpace = THREE.SRGBColorSpace;
+  // superficie solida con la Tierra real (equirectangular -> coincide con enGlobo)
+  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R, 64, 48),
+    new THREE.MeshPhongMaterial({ map: tierraTex, emissive: 0x0a1428, emissiveIntensity: 0.22, shininess: 12, specular: 0x223355 })));
+  // graticula muy tenue (toque sala de control)
+  globo.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.002, 48, 32),
+    new THREE.MeshBasicMaterial({ color: COL.cobalto, wireframe: true, transparent: true, opacity: 0.06 })));
+  // atmosfera (glow)
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 1.16, 32, 24),
+    new THREE.MeshBasicMaterial({ color: COL.acento, transparent: true, opacity: 0.1, side: THREE.BackSide }));
   globo.add(halo);
   // estrellas (puntos fuera del globo)
   {
