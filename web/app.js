@@ -418,5 +418,7 @@ try {
 
 /* PWA: registro externo (sin <script> inline, compatible con el CSP estricto) */
 if ("serviceWorker" in navigator) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+    .then((reg) => reg.update().catch(() => {}))
+    .catch(() => {}));
 }
