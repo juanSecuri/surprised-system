@@ -152,6 +152,14 @@ function arrancar() {
   // ---------- ARCOS DE AMENAZA ----------
   const arcos = [];
   const conteo = new Map();
+  const etiquetasCiudad = [];
+  const pulsos = [];
+  function pulso(pos, color) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.08, 24),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthTest: false, blending: THREE.AdditiveBlending }));
+    m.position.copy(pos); m.lookAt(pos.clone().multiplyScalar(2));
+    globo.add(m); pulsos.push({ m, vida: 1 });
+  }
   function lanzarArco(numero, nivel) {
     const o = ubicar(numero);
     conteo.set(o.lugar, (conteo.get(o.lugar) || 0) + 1); refrescarTop();
@@ -160,11 +168,15 @@ function arrancar() {
     const med = ini.clone().add(fin).multiplyScalar(0.5).normalize().multiplyScalar(R + 1.1 + Math.random() * 0.5);
     const curva = new THREE.QuadraticBezierCurve3(ini, med, fin);
     const color = colorNivel(nivel);
-    const tubo = new THREE.Mesh(new THREE.TubeGeometry(curva, 40, 0.018, 6, false),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }));
-    const punta = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), new THREE.MeshBasicMaterial({ color }));
+    const tubo = new THREE.Mesh(new THREE.TubeGeometry(curva, 44, 0.02, 6, false),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }));
+    const punta = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 10), new THREE.MeshBasicMaterial({ color }));
     globo.add(tubo, punta);
-    arcos.push({ curva, tubo, punta, t: 0, vida: 1, fase: "viaja" });
+    const etq = etiqueta(o.lugar, nivel === "alto" ? 0xffb3c0 : nivel === "medio" ? 0xffd79a : 0xd6ffe6);
+    etq.material.depthTest = true; etq.scale.set(0.95, 0.27, 1);
+    etq.position.copy(enGlobo(o.lat, o.lon, R * 1.07));
+    globo.add(etq); etiquetasCiudad.push({ spr: etq, vida: 1.8 });
+    arcos.push({ curva, tubo, punta, color, t: 0, vida: 1, fase: "viaja" });
     ping(nivel);
     if (arcos.length > 14) { const v = arcos.shift(); globo.remove(v.tubo, v.punta); }
   }
@@ -231,15 +243,18 @@ function arrancar() {
     } catch {}
   }
 
-  // ---------- cámara + controles ----------
-  let objT = 0.35, theta = 0.35, phi = 0.12, objP = 0.12, arrastrando = false, px = 0, py = 0;
-  const foco = new THREE.Vector3(0, 0.1, 1.2);
-  lienzo.addEventListener("pointerdown", (e) => { armarAudio(); arrastrando = true; px = e.clientX; py = e.clientY; lienzo.setPointerCapture(e.pointerId); });
+  // ---------- cámara fija + arrastre que gira el GLOBO ----------
+  const foco = new THREE.Vector3(0, 0.1, 0);
+  camara.position.set(0, 0.6, 8.6); camara.lookAt(foco);
+  globo.rotation.y = -0.279;  // Colombia / Sudamérica de frente
+  globo.rotation.x = -0.12;
+  let velY = 0, velX = 0, arrastrando = false, px = 0, py = 0;
+  lienzo.addEventListener("pointerdown", (e) => { armarAudio(); arrastrando = true; px = e.clientX; py = e.clientY; velY = 0; velX = 0; lienzo.setPointerCapture(e.pointerId); });
   lienzo.addEventListener("pointerup", (e) => { arrastrando = false; try { lienzo.releasePointerCapture(e.pointerId); } catch {} });
   lienzo.addEventListener("pointermove", (e) => {
     if (!arrastrando) return;
-    objT += (e.clientX - px) * 0.005; objP += (e.clientY - py) * 0.005; px = e.clientX; py = e.clientY;
-    objT = Math.max(-0.9, Math.min(0.9, objT)); objP = Math.max(-0.35, Math.min(0.6, objP));
+    velY = (e.clientX - px) * 0.006; velX = (e.clientY - py) * 0.006; px = e.clientX; py = e.clientY;
+    globo.rotation.y += velY; globo.rotation.x = Math.max(-1.0, Math.min(1.0, globo.rotation.x + velX));
   });
   function medir() {
     const w = lienzo.clientWidth, h = lienzo.clientHeight || Math.round(w * 0.62);
@@ -259,21 +274,31 @@ function arrancar() {
   const reloj = new THREE.Clock();
   function animar() {
     const dt = Math.min(0.05, reloj.getDelta());
-    if (!reduce) globo.rotation.y += dt * 0.05;
-    theta += (objT - theta) * 0.08; phi += (objP - phi) * 0.08;
-    const rad = 8.6;
-    camara.position.set(Math.sin(theta) * rad, 1.1 + phi * 3, Math.cos(theta) * rad);
-    camara.lookAt(foco);
+    if (!arrastrando) {
+      globo.rotation.y += velY; globo.rotation.x = Math.max(-1.0, Math.min(1.0, globo.rotation.x + velX));
+      velY *= 0.95; velX *= 0.95;
+      if (!reduce && Math.abs(velY) < 0.0004 && Math.abs(velX) < 0.0004) globo.rotation.y += 0.0006;
+    }
     Object.values(N).forEach((n) => { if (!reduce) n.anillo.rotation.z += dt * 0.6; });
     paquetes.forEach((p) => { p.t += dt * p.vel; if (p.t > 1) p.t -= 1; p.m.position.lerpVectors(p.a, p.b, p.t); });
     for (let i = arcos.length - 1; i >= 0; i--) {
       const a = arcos[i];
       if (a.fase === "viaja") {
         a.t += dt * 0.5; a.punta.position.copy(a.curva.getPointAt(Math.min(1, a.t)));
-        if (a.t >= 1) { a.fase = "apaga"; globo.remove(a.punta); }
+        if (a.t >= 1) { a.fase = "apaga"; globo.remove(a.punta); pulso(a.curva.getPointAt(1), a.color); }
       } else { a.vida -= dt * 0.25; a.tubo.material.opacity = Math.max(0, a.vida * 0.85); if (a.vida <= 0) { globo.remove(a.tubo); arcos.splice(i, 1); } }
     }
-    if (flash > 0) { flash = Math.max(0, flash - dt * 1.2); halo.material.opacity = 0.06 + flash * 0.35; halo.material.color.setHex(flash > 0.5 ? COL.rojo : COL.acento); }
+    for (let i = etiquetasCiudad.length - 1; i >= 0; i--) {
+      const e = etiquetasCiudad[i]; e.vida -= dt * 0.35;
+      e.spr.material.opacity = Math.max(0, Math.min(1, e.vida)); e.spr.position.multiplyScalar(1 + dt * 0.01);
+      if (e.vida <= 0) { globo.remove(e.spr); etiquetasCiudad.splice(i, 1); }
+    }
+    for (let i = pulsos.length - 1; i >= 0; i--) {
+      const p = pulsos[i]; p.vida -= dt * 1.2; p.m.scale.multiplyScalar(1 + dt * 2.2);
+      p.m.material.opacity = Math.max(0, p.vida * 0.6);
+      if (p.vida <= 0) { globo.remove(p.m); pulsos.splice(i, 1); }
+    }
+    if (flash > 0) { flash = Math.max(0, flash - dt * 1.2); halo.material.opacity = 0.1 + flash * 0.35; halo.material.color.setHex(flash > 0.5 ? COL.rojo : COL.acento); }
     else halo.material.color.setHex(COL.acento);
     renderer.render(scene, camara);
   }
